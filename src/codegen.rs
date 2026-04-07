@@ -28,10 +28,22 @@ impl Codegen {
         std::fs::write(path, &self.output).unwrap();
     }
 
+    fn emit_pop(&mut self) {
+        self.emit("add rsp, 8");
+    }
 
     fn emit_stmt(&mut self, stmt: Stmt) {
+        // dbg!(&stmt);
         match stmt.stmt {
-            StmtType::Expr(expr) => self.emit_expr(expr),
+            StmtType::Expr(expr) => {
+                self.emit_expr(expr);
+                self.emit_pop();
+            }
+            StmtType::Println(expr) => {
+                self.emit_expr(expr);
+                self.emit("pop rax");
+                self.emit("call print_int");
+            }
             _ => todo!(),
         }
     }
@@ -59,8 +71,37 @@ impl Codegen {
     }
 
     fn emit_prelude(&mut self) {
+        self.emit("section .bss");
+        self.emit("buffer resb 32");
+
         self.emit("section .text");
         self.emit("global _start");
+
+        self.emit("print_int:");
+        self.emit("mov rcx, buffer + 31");
+        self.emit("mov byte [rcx], 10");
+        self.emit("dec rcx");
+        self.emit("mov rbx, 10");
+
+        self.emit(".convert:");
+        self.emit("xor rdx, rdx");
+        self.emit("div rbx");
+        self.emit("add dl, '0'");
+        self.emit("mov [rcx], dl");
+        self.emit("dec rcx");
+        self.emit("test rax, rax");
+        self.emit("jnz .convert");
+
+        self.emit("inc rcx");
+
+        self.emit("mov rax, 1");
+        self.emit("mov rdi, 1");
+        self.emit("mov rsi, rcx");
+        self.emit("mov rdx, buffer + 32");
+        self.emit("sub rdx, rcx");
+        self.emit("syscall");
+        self.emit("ret");
+
         self.emit("_start:");
     }
 
