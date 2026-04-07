@@ -1,4 +1,4 @@
-use crate::{analysis_types::Operator, op_code::OpCode, token::TokenType};
+use crate::{analysis_types::Operator, token::TokenType};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
@@ -130,22 +130,6 @@ impl BinaryOp {
             BinaryOp::GreaterEqual => Operator::GreaterEqual,
             BinaryOp::And => Operator::And,
             BinaryOp::Or => Operator::Or,
-        }
-    }
-    pub fn to_op_code(self) -> OpCode {
-        match self {
-            BinaryOp::Add => OpCode::Add,
-            BinaryOp::Sub => OpCode::Sub,
-            BinaryOp::Mul => OpCode::Mul,
-            BinaryOp::Div => OpCode::Div,
-            BinaryOp::Equal => OpCode::Equal,
-            BinaryOp::NotEqual => OpCode::NotEqual,
-            BinaryOp::Less => OpCode::Less,
-            BinaryOp::LessEqual => OpCode::LessEqual,
-            BinaryOp::Greater => OpCode::Greater,
-            BinaryOp::GreaterEqual => OpCode::GreaterEqual,
-            BinaryOp::And => OpCode::And,
-            BinaryOp::Or => OpCode::Or,
         }
     }
 }

@@ -1,4 +1,3 @@
-use analysis::Analyser;
 use codegen::Codegen;
 use error::{PRINT_PARSE_TREE, PRINT_TOKENS};
 use scanner::Scanner;
@@ -9,7 +8,6 @@ mod analysis;
 mod analysis_types;
 mod error;
 mod expression;
-mod op_code;
 mod parse_types;
 mod parser;
 mod scanner;
