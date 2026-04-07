@@ -1,4 +1,5 @@
 use analysis::Analyser;
+use codegen::Codegen;
 use error::{PRINT_PARSE_TREE, PRINT_TOKENS};
 use scanner::Scanner;
 
@@ -14,6 +15,7 @@ mod parser;
 mod scanner;
 mod statement;
 mod token;
+mod codegen;
 mod value;
 
 fn main() {
@@ -60,8 +62,14 @@ fn main() {
         dbg!(&statements);
     }
 
-    let entities = match Analyser::analyse_stmts(&mut statements) {
-        Some(func_data) => func_data,
-        None => return,
-    };
+    let mut codegen = Codegen::new();
+    codegen.compile_statements(statements);
+    codegen.write_to_file("out.asm");
+
+    // let entities = match Analyser::analyse_stmts(&mut statements) {
+    //     Some(func_data) => func_data,
+    //     None => return,
+    // };
+
+    
 }
