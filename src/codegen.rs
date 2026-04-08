@@ -17,6 +17,12 @@ impl Codegen {
 
     pub fn compile_statements(&mut self, stmts: Vec<Stmt>) {
         self.emit_prelude();
+
+        self.funcs.push(FuncCompiler::new("main".to_string()));
+        self.emit("push rbp");
+        self.emit("mov rbp, rsp");
+        self.emit("sub rsp, 16");
+
         for stmt in stmts {
             self.emit_stmt(stmt);
         }
@@ -44,10 +50,16 @@ impl Codegen {
                 self.emit_pop();
                 self.emit("call print_int");
             }
-            // StmtType::VarDecl {name, value, ty } => {
-            //     // self.emit_expr(expr);
-            //     self.emit_pop();
-            // }
+            StmtType::VarDecl {name, value, ty: _ } => {
+                self.funcs.last_mut().unwrap().add_local(name.to_string());
+                self.emit_expr(value);
+                self.emit("pop rax");
+
+                let var_index = self.funcs.last().unwrap().get_local_count() * 8;
+                let emit_var = format!("mov qword [rbp-{}], rax", var_index);
+                self.emit(&emit_var);
+                // self.emit_pop();
+            }
             StmtType::Func {
                 name,
                 parameters,
@@ -63,8 +75,13 @@ impl Codegen {
         }
     }
     fn emit_expr(&mut self, expr: Expr) {
-        // dbg!(&expr.expr);
+        dbg!(&expr.expr);
         match expr.expr {
+            ExprType::Identifier(name) => {
+                let index = self.funcs.last().unwrap().resolve_local(name);
+                let index = index.unwrap() as i16 + 1;
+                self.emit(&format!("mov rax, [rbp-{}]", index * 8));
+            }
             ExprType::Lit(lit) => match lit {
                 Literal::I64(num) => {
                     self.emit(&format!("mov rax, {}", num));

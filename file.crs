@@ -1,3 +1,5 @@
 fn main() {
-    pr  -32 * 3;
+    int x = 3;
+    int y = 4;
+    pr x + y;
 }
