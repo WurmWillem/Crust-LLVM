@@ -80,6 +80,44 @@ impl Codegen {
         self.output.push('\n');
     }
 
+    fn emit_opcode(&mut self, op: crate::parse_types::BinaryOp) {
+        use crate::parse_types::BinaryOp;
+        match op {
+            BinaryOp::Add => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("add rax, rbx");
+                self.emit("push rax");
+            }
+            BinaryOp::Sub => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("sub rax, rbx");
+                self.emit("push rax");
+            }
+            BinaryOp::Mul => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("mul rax, rbx");
+                self.emit("push rax");
+            }
+            BinaryOp::Div => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("div rbx");
+                self.emit("push rax");
+            }
+            BinaryOp::Equal => todo!(),
+            BinaryOp::NotEqual => todo!(),
+            BinaryOp::Less => todo!(),
+            BinaryOp::LessEqual => todo!(),
+            BinaryOp::Greater => todo!(),
+            BinaryOp::GreaterEqual => todo!(),
+            BinaryOp::And => todo!(),
+            BinaryOp::Or => todo!(),
+        }
+    }
+
     fn emit_prelude(&mut self) {
         self.emit("section .bss");
         self.emit("buffer resb 32");
@@ -94,11 +132,35 @@ impl Codegen {
 
     fn emit_print_int(&mut self) {
         self.emit("print_int:");
+        self.emit("push rbx");
         self.emit("mov rcx, buffer + 31");
         self.emit("mov byte [rcx], 10");
         self.emit("dec rcx");
         self.emit("mov rbx, 10");
 
+        self.emit("test rax, rax");
+        self.emit("jz  .zero_or_positive");
+        self.emit("js  .negative");
+        self.emit("jmp .positive");
+
+        self.emit(".zero_or_positive:");
+        self.emit("xor r8, r8");
+        self.emit("jmp .convert_start");
+
+        self.emit(".negative:");
+        self.emit("neg rax");
+        self.emit("jo  .neg_min");
+        self.emit("mov r8, 1");
+        self.emit("jmp .convert_start");
+
+        self.emit(".neg_min:");
+        self.emit("mov r8, 1");
+        self.emit("jmp .convert_start");
+
+        self.emit(".positive:");
+        self.emit("xor r8, r8");
+
+        self.emit(".convert_start:");
         self.emit(".convert:");
         self.emit("xor rdx, rdx");
         self.emit("div rbx");
@@ -110,12 +172,20 @@ impl Codegen {
 
         self.emit("inc rcx");
 
+        self.emit("test r8, r8");
+        self.emit("jz  .print");
+        self.emit("dec rcx");
+        self.emit("mov byte [rcx], '-'");
+
+        self.emit(".print:");
         self.emit("mov rax, 1");
         self.emit("mov rdi, 1");
         self.emit("mov rsi, rcx");
         self.emit("mov rdx, buffer + 32");
         self.emit("sub rdx, rcx");
         self.emit("syscall");
+
+        self.emit("pop rbx");
         self.emit("ret");
     }
 
@@ -124,43 +194,4 @@ impl Codegen {
         self.emit("xor rdi, rdi");
         self.emit("syscall");
     }
-
-fn emit_opcode(&mut self, op: crate::parse_types::BinaryOp) {
-    use crate::parse_types::BinaryOp;
-    match op {
-        BinaryOp::Add => {
-            self.emit("pop rbx");
-            self.emit("pop rax");
-            self.emit("add rax, rbx");
-            self.emit("push rax");
-        }
-        BinaryOp::Sub => {
-            self.emit("pop rbx");
-            self.emit("pop rax");
-            self.emit("sub rax, rbx");
-            self.emit("push rax");
-        }
-        BinaryOp::Mul => {
-            self.emit("pop rbx");
-            self.emit("pop rax");
-            self.emit("mul rax, rbx");
-            self.emit("push rax");
-        }
-        BinaryOp::Div => {
-            self.emit("pop rbx");
-            self.emit("pop rax");
-            self.emit("div rbx");
-            self.emit("push rax");
-        }
-        BinaryOp::Equal => todo!(),
-        BinaryOp::NotEqual => todo!(),
-        BinaryOp::Less => todo!(),
-        BinaryOp::LessEqual => todo!(),
-        BinaryOp::Greater => todo!(),
-        BinaryOp::GreaterEqual => todo!(),
-        BinaryOp::And => todo!(),
-        BinaryOp::Or => todo!(),
-    }
 }
-}
-
