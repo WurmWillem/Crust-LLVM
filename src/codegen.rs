@@ -1,17 +1,17 @@
 use crate::{
-    expression::{Expr, ExprType},
-    statement::{Stmt, StmtType},
-    token::{Literal, TokenType},
+    expression::{Expr, ExprType}, func_compiler::FuncCompiler, statement::{Stmt, StmtType}, token::{Literal, TokenType}
 };
 
 pub struct Codegen {
-    pub output: String,
+    output: String,
+    funcs: Vec<FuncCompiler>
 }
 
 impl Codegen {
     pub fn new() -> Self {
         Self {
             output: String::new(),
+            funcs: Vec::new(),
         }
     }
 
@@ -48,6 +48,17 @@ impl Codegen {
             //     // self.emit_expr(expr);
             //     self.emit_pop();
             // }
+            StmtType::Func {
+                name,
+                parameters,
+                body,
+                return_ty,
+                use_self,
+            } => {
+                for stmt in body {
+                    self.emit_stmt(stmt);
+                }
+            }
             _ => todo!(),
         }
     }
@@ -74,8 +85,8 @@ impl Codegen {
                         self.emit("pop rax");
                         self.emit("neg rax");
                         self.emit("push rax");
-                    }   
-                    _ => todo!()
+                    }
+                    _ => todo!(),
                 }
             }
             _ => todo!(),
