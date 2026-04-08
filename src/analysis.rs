@@ -150,7 +150,7 @@ impl<'a> Analyser<'a> {
             StmtType::Expr(expr) => {
                 self.analyse_expr(expr)?;
             }
-            StmtType::Var { name, value, ty } => {
+            StmtType::VarDecl { name, value, ty } => {
                 if let ValueType::UnknownType(name) = ty {
                     if !self.entities.structs.contains_key(name as &str)
                         && !self.entities.enums.contains_key(name as &str)

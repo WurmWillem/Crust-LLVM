@@ -26,7 +26,13 @@ ret
 _start:
 mov rax, 3
 push rax
+mov rax, 30
+push rax
+pop rbx
 pop rax
+div rbx
+push rax
+add rsp, 8
 call print_int
 mov rax, 60
 xor rdi, rdi

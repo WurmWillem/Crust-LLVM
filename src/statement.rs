@@ -14,7 +14,7 @@ impl<'a> Stmt<'a> {
 #[derive(Debug, Clone)]
 pub enum StmtType<'a> {
     Expr(Expr<'a>),
-    Var {
+    VarDecl {
         name: &'a str,
         value: Expr<'a>,
         ty: ValueType,

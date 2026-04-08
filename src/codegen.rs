@@ -41,9 +41,13 @@ impl Codegen {
             }
             StmtType::Println(expr) => {
                 self.emit_expr(expr);
-                self.emit("pop rax");
+                self.emit_pop();
                 self.emit("call print_int");
             }
+            // StmtType::VarDecl {name, value, ty } => {
+            //     // self.emit_expr(expr);
+            //     self.emit_pop();
+            // }
             _ => todo!(),
         }
     }
@@ -57,6 +61,12 @@ impl Codegen {
                 }
                 _ => todo!(),
             },
+            ExprType::Binary { left, op, right } => {
+                self.emit_expr(*left);
+                self.emit_expr(*right);
+
+                self.emit_opcode(op);
+            }
             _ => todo!(),
         }
     }
@@ -77,6 +87,12 @@ impl Codegen {
         self.emit("section .text");
         self.emit("global _start");
 
+        self.emit_print_int();
+
+        self.emit("_start:");
+    }
+
+    fn emit_print_int(&mut self) {
         self.emit("print_int:");
         self.emit("mov rcx, buffer + 31");
         self.emit("mov byte [rcx], 10");
@@ -101,8 +117,6 @@ impl Codegen {
         self.emit("sub rdx, rcx");
         self.emit("syscall");
         self.emit("ret");
-
-        self.emit("_start:");
     }
 
     fn emit_postlude(&mut self) {
@@ -110,4 +124,43 @@ impl Codegen {
         self.emit("xor rdi, rdi");
         self.emit("syscall");
     }
+
+fn emit_opcode(&mut self, op: crate::parse_types::BinaryOp) {
+    use crate::parse_types::BinaryOp;
+    match op {
+        BinaryOp::Add => {
+            self.emit("pop rbx");
+            self.emit("pop rax");
+            self.emit("add rax, rbx");
+            self.emit("push rax");
+        }
+        BinaryOp::Sub => {
+            self.emit("pop rbx");
+            self.emit("pop rax");
+            self.emit("sub rax, rbx");
+            self.emit("push rax");
+        }
+        BinaryOp::Mul => {
+            self.emit("pop rbx");
+            self.emit("pop rax");
+            self.emit("mul rax, rbx");
+            self.emit("push rax");
+        }
+        BinaryOp::Div => {
+            self.emit("pop rbx");
+            self.emit("pop rax");
+            self.emit("div rbx");
+            self.emit("push rax");
+        }
+        BinaryOp::Equal => todo!(),
+        BinaryOp::NotEqual => todo!(),
+        BinaryOp::Less => todo!(),
+        BinaryOp::LessEqual => todo!(),
+        BinaryOp::Greater => todo!(),
+        BinaryOp::GreaterEqual => todo!(),
+        BinaryOp::And => todo!(),
+        BinaryOp::Or => todo!(),
+    }
 }
+}
+

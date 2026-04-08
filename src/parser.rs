@@ -285,7 +285,7 @@ impl<'a> Parser<'a> {
             Expr::new(ExprType::Lit(Literal::Null), line)
         };
 
-        let kind = StmtType::Var { name, value, ty };
+        let kind = StmtType::VarDecl { name, value, ty };
         let var = Stmt::new(kind, line);
         Ok(var)
     }
@@ -413,7 +413,7 @@ impl<'a> Parser<'a> {
         // declare var
         let value = self.expression()?;
         let ty = ValueType::I64;
-        let kind = StmtType::Var { name, value, ty };
+        let kind = StmtType::VarDecl { name, value, ty };
         let var = Box::new(Stmt::new(kind, line));
 
         // condition
