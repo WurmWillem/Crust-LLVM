@@ -112,6 +112,7 @@ const MAX_LOCAL_AMT: usize = u8::MAX as usize;
 
 #[derive(Debug)]
 pub struct FuncCompiler {
+    output: String,
     locals: Vec<Local>,
     scope_depth: usize,
     break_stack: Vec<Vec<usize>>,
@@ -120,12 +121,26 @@ pub struct FuncCompiler {
 impl FuncCompiler {
     pub fn new(func_name: String) -> Self {
         // let local = Local::new("".to_string(), 0);
-        Self {
+        let mut func = Self {
+            output: String::new(),
             locals: vec![],
             scope_depth: 0,
             break_stack: vec![],
             continue_stack: vec![],
-        }
+        };
+        func.emit("push rbp");
+        func.emit("mov rbp, rsp");
+        func.emit("sub rsp, 16");
+        func
+    }
+
+    pub fn get_output(&self) -> String {
+        self.output.clone()
+    }
+
+    pub fn emit(&mut self, line: &str) {
+        self.output.push_str(line);
+        self.output.push('\n');
     }
 
     pub fn add_local(&mut self, name: String) {
