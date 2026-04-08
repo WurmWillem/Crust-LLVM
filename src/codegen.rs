@@ -1,7 +1,7 @@
 use crate::{
     expression::{Expr, ExprType},
     statement::{Stmt, StmtType},
-    token::Literal,
+    token::{Literal, TokenType},
 };
 
 pub struct Codegen {
@@ -65,7 +65,18 @@ impl Codegen {
                 self.emit_expr(*left);
                 self.emit_expr(*right);
 
-                self.emit_opcode(op);
+                self.emit_binary_op(op);
+            }
+            ExprType::Unary { prefix, value } => {
+                self.emit_expr(*value);
+                match prefix {
+                    TokenType::Minus => {
+                        self.emit("pop rax");
+                        self.emit("neg rax");
+                        self.emit("push rax");
+                    }   
+                    _ => todo!()
+                }
             }
             _ => todo!(),
         }
@@ -80,7 +91,7 @@ impl Codegen {
         self.output.push('\n');
     }
 
-    fn emit_opcode(&mut self, op: crate::parse_types::BinaryOp) {
+    fn emit_binary_op(&mut self, op: crate::parse_types::BinaryOp) {
         use crate::parse_types::BinaryOp;
         match op {
             BinaryOp::Add => {

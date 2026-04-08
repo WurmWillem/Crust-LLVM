@@ -49,13 +49,16 @@ syscall
 pop rbx
 ret
 _start:
-mov rax, 1
+mov rax, 32
 push rax
-mov rax, 4
+pop rax
+neg rax
+push rax
+mov rax, 3
 push rax
 pop rbx
 pop rax
-sub rax, rbx
+mul rax, rbx
 push rax
 add rsp, 8
 call print_int
