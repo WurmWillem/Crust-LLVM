@@ -154,15 +154,15 @@ impl TokenType {
             | TT::GreaterEqual
             | TT::Less
             | TT::LessEqual => ParseRule::new(F::Empty, F::Binary, P::Comparison),
-            TT::Identifier => ParseRule::new(F::Var, F::Empty, P::None),
-            TT::StringLit => ParseRule::new(F::String, F::Empty, P::None),
-            TT::Num => ParseRule::new(F::Number, F::Empty, P::None),
+            TT::Identifier => ParseRule::new(F::Var, F::Empty, P::Primary),
+            TT::StringLit => ParseRule::new(F::String, F::Empty, P::Primary),
+            TT::Num => ParseRule::new(F::Number, F::Empty, P::Primary),
             TT::As => ParseRule::new(F::Number, F::Cast, P::Call),
             TT::And => ParseRule::new(F::Empty, F::Binary, P::And),
             TT::Or => ParseRule::new(F::Empty, F::Binary, P::Or),
-            TT::False | TT::True | TT::Null => ParseRule::new(F::Literal, F::Empty, P::None),
-            TT::This => ParseRule::new(F::This, F::Empty, P::None),
-            _ => ParseRule::new(F::Empty, F::Empty, P::None),
+            TT::False | TT::True | TT::Null => ParseRule::new(F::Literal, F::Empty, P::Primary),
+            TT::This => ParseRule::new(F::This, F::Empty, P::Primary),
+            _ => ParseRule::new(F::Empty, F::Empty, P::Primary),
         }
     }
     // pub fn is_value_type(&self) -> bool {

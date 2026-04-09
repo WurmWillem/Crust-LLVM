@@ -121,21 +121,17 @@ pub struct FuncCompiler {
 impl FuncCompiler {
     pub fn new(func_name: String) -> Self {
         // let local = Local::new("".to_string(), 0);
-        let mut func = Self {
+        Self {
             output: String::new(),
             locals: vec![],
             scope_depth: 0,
             break_stack: vec![],
             continue_stack: vec![],
-        };
-        func.emit("push rbp");
-        func.emit("mov rbp, rsp");
-        func.emit("sub rsp, 16");
-        func
+        }
     }
-
-    pub fn get_output(&self) -> String {
-        self.output.clone()
+     
+    pub fn end(self) -> (String, usize) {
+        (self.output, self.locals.len())
     }
 
     pub fn emit(&mut self, line: &str) {

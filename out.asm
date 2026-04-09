@@ -51,7 +51,7 @@ ret
 _start:
 push rbp
 mov rbp, rsp
-sub rsp, 16
+sub rsp, 24
 mov rax, 3
 push rax
 pop rax
@@ -60,11 +60,23 @@ mov rax, 4
 push rax
 pop rax
 mov qword [rbp-16], rax
+mov rax, 5
+push rax
+pop rax
+mov qword [rbp-24], rax
 mov rax, [rbp-8]
+push rax
 mov rax, [rbp-16]
+push rax
+mov rax, [rbp-24]
+push rax
 pop rbx
 pop rax
-add rax, rbx
+sub rax, rbx
+push rax
+pop rbx
+pop rax
+sub rax, rbx
 push rax
 add rsp, 8
 call print_int

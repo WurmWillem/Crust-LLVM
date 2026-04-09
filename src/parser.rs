@@ -65,7 +65,6 @@ impl<'a> Parser<'a> {
     fn parse_prefix(&mut self, precedence: Precedence) -> Result<(bool, Expr<'a>), ParseErr> {
         let kind = self.previous().ty;
 
-        // dbg!(kind);
         let prefix = kind.to_parse_rule().prefix;
         if prefix == FnType::Empty {
             let msg = "Expected expression.";
@@ -316,11 +315,13 @@ impl<'a> Parser<'a> {
         let left = Box::new(left);
         let op = BinaryOp::from_token_type(self.previous().ty);
 
-        let precedence = op.get_precedency();
+        let precedence = op.get_precedency().to_next_precedency();
+        // dbg!(precedence);
         let right = Box::new(self.parse_precedence(precedence)?);
 
         let line = self.previous().line;
         let kind = ExprType::Binary { left, op, right };
+        // dbg!(&kind);
         let expr = Expr::new(kind, line);
         Ok(expr)
     }
@@ -511,7 +512,6 @@ impl<'a> Parser<'a> {
                 | TokenType::While
                 | TokenType::Print
                 | TokenType::Return => {
-                    // dbg!(self.peek().kind);
                     return;
                 }
                 _ => (),
@@ -640,7 +640,6 @@ impl<'a> Parser<'a> {
 
     fn double_colon(&mut self, r#type: Expr<'a>) -> Result<Expr<'a>, ParseErr> {
         self.consume(TokenType::Identifier, "Expected property name after '::'.")?;
-        // dbg!("::");
 
         let property = self.previous();
         let ty = ExprType::Colon {

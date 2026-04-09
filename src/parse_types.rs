@@ -3,7 +3,7 @@ use crate::{analysis_types::Operator, token::TokenType};
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
 pub enum Precedence {
-    None,
+    Primary,
     Assignment, // =
     Or,         // or
     And,        // and
@@ -14,10 +14,27 @@ pub enum Precedence {
     Unary,      // ! -
     Call,       // . ()
 }
+impl Precedence {
+    pub fn to_next_precedency(self) -> Self {
+        use Precedence::*;
+        match self {
+            Assignment => Or,
+            Or => And,
+            And => Equality,
+            Equality => Comparison,
+            Comparison => Term,
+            Term => Factor,
+            Factor => Unary,
+            Unary => Call,
+            Call => Primary,
+            Primary => Primary,
+        }
+    }
+}
 impl std::convert::From<u8> for Precedence {
     fn from(value: u8) -> Self {
         match value {
-            0 => Self::None,
+            0 => Self::Primary,
             1 => Self::Assignment,
             2 => Self::Or,
             3 => Self::And,

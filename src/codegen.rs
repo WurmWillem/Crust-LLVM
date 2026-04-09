@@ -70,20 +70,26 @@ impl Codegen {
                 for stmt in body {
                     self.emit_stmt(stmt);
                 }
-                self.output.push_str(&self.funcs.pop().unwrap().get_output());
+                let (output, local_amt) = self.funcs.pop().unwrap().end();
 
+                let mut func_start = String::from("push rbp\n");
+                func_start.push_str("mov rbp, rsp\n");
+                func_start.push_str(&format!("sub rsp, {}\n", local_amt * 8));
+                self.output.push_str(&func_start);
 
+                self.output.push_str(&output);
             }
             _ => todo!(),
         }
     }
     fn emit_expr(&mut self, expr: Expr) {
-        // dbg!(&expr.expr);
+        dbg!(&expr.expr);
         match expr.expr {
             ExprType::Identifier(name) => {
                 let index = self.funcs.last().unwrap().resolve_local(name);
                 let index = index.unwrap() as i16 + 1;
                 self.emit(&format!("mov rax, [rbp-{}]", index * 8));
+                self.emit("push rax");
             }
             ExprType::Lit(lit) => match lit {
                 Literal::I64(num) => {
