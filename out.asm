@@ -68,11 +68,11 @@ mov rax, [rbp-8]
 push rax
 mov rax, [rbp-16]
 push rax
-mov rax, [rbp-24]
-push rax
 pop rbx
 pop rax
 sub rax, rbx
+push rax
+mov rax, [rbp-24]
 push rax
 pop rbx
 pop rax

@@ -67,7 +67,7 @@ fn main() {
         None => return,
     };
 
-    // let mut codegen = Codegen::new();
-    // codegen.compile_statements(statements);
-    // codegen.write_to_file("out.asm");
+    let mut codegen = Codegen::new();
+    codegen.compile_statements(statements);
+    codegen.write_to_file("out.asm");
 }
