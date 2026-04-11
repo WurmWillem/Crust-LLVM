@@ -124,6 +124,14 @@ impl Codegen {
                 self.emit(&format!("mov rax, [rbp-{}]", index * 8));
                 self.emit("push rax");
             }
+            ExprType::Assign { name, new_value } => {
+                self.emit_expr(*&new_value);
+                self.emit("pop rax");
+
+                let index = self.funcs.last().unwrap().resolve_local(name);
+                let index = index.unwrap() as i16 + 1;
+                self.emit(&format!("mov [rbp-{}], rax", index * 8));
+            }
             ExprType::Lit(lit) => match lit {
                 Literal::I64(num) => {
                     self.emit(&format!("mov rax, {}", num));

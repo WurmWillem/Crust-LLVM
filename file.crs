@@ -1,7 +1,5 @@
 fn main() {
     int x = 0;
-    while x < 10 {
-        pr x;
-        x = x + 1;
-    }
+    x = 3;
+    pr x;
 }

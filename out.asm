@@ -51,21 +51,26 @@ ret
 _start:
 push rbp
 mov rbp, rsp
-sub rsp, 0
-.start_while:
-mov rax, 1
+sub rsp, 8
+; x declaration
+mov rax, 0
 push rax
 pop rax
-cmp rax, 1
-jne .after_body
+mov qword [rbp-8], rax
+
+; expression
+mov rax, 3
+push rax
+pop rax
+mov [rbp-8], rax
+add rsp, 8
+
 ; println
-mov rax, 1
+mov rax, [rbp-8]
 push rax
 add rsp, 8
 call print_int
 
-jmp .start_while
-.after_body:
 mov rax, 60
 xor rdi, rdi
 syscall
