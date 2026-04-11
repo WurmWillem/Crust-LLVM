@@ -59,18 +59,7 @@ pop rax
 mov qword [rbp-8], rax
 
 .start_while0:
-; x < 1000000000000000000
-mov rax, [rbp-8]
-push rax
-mov rax, 1000000000000000000
-push rax
-pop rbx
-pop rax
-cmp rax, rbx
-setl al
-movzx rax, al
-push rax
-pop rax
+mov rax, 1
 test rax, rax
 jz .after_body0
 ; y declaration
@@ -80,18 +69,7 @@ pop rax
 mov qword [rbp-16], rax
 
 .start_while1:
-; y < 1000000000000000000
-mov rax, [rbp-16]
-push rax
-mov rax, 1000000000000000000
-push rax
-pop rbx
-pop rax
-cmp rax, rbx
-setl al
-movzx rax, al
-push rax
-pop rax
+mov rax, 1
 test rax, rax
 jz .after_body1
 ; expression

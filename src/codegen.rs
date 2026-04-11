@@ -138,6 +138,7 @@ impl Codegen {
                 let index = self.funcs.last().unwrap().resolve_local(name);
                 let index = index.unwrap() as i16 + 1;
                 self.emit(&format!("mov [rbp-{}], rax", index * 8));
+                self.emit("push rax");
             }
             ExprType::Lit(lit) => match lit {
                 Literal::I64(num) => {
