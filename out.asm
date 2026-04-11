@@ -51,24 +51,84 @@ ret
 _start:
 push rbp
 mov rbp, rsp
-sub rsp, 8
+sub rsp, 16
 ; x declaration
 mov rax, 0
 push rax
 pop rax
 mov qword [rbp-8], rax
 
+.start_while0:
+; x < 1000000000000000000
+mov rax, [rbp-8]
+push rax
+mov rax, 1000000000000000000
+push rax
+pop rbx
+pop rax
+cmp rax, rbx
+setl al
+movzx rax, al
+push rax
+pop rax
+test rax, rax
+jz .after_body0
+; y declaration
+mov rax, 0
+push rax
+pop rax
+mov qword [rbp-16], rax
+
+.start_while1:
+; y < 1000000000000000000
+mov rax, [rbp-16]
+push rax
+mov rax, 1000000000000000000
+push rax
+pop rbx
+pop rax
+cmp rax, rbx
+setl al
+movzx rax, al
+push rax
+pop rax
+test rax, rax
+jz .after_body1
 ; expression
-mov rax, 3
+; y + 1
+mov rax, [rbp-16]
+push rax
+mov rax, 1
+push rax
+pop rbx
+pop rax
+add rax, rbx
+push rax
+pop rax
+mov [rbp-16], rax
+pop rax
+
+jmp .start_while1
+.after_body1:
+; expression
+; x + 1
+mov rax, [rbp-8]
+push rax
+mov rax, 1
+push rax
+pop rbx
+pop rax
+add rax, rbx
 push rax
 pop rax
 mov [rbp-8], rax
-add rsp, 8
+pop rax
 
+jmp .start_while0
+.after_body0:
 ; println
 mov rax, [rbp-8]
 push rax
-add rsp, 8
 call print_int
 
 mov rax, 60

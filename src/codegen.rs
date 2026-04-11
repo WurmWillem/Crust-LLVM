@@ -10,6 +10,7 @@ use crate::{
 pub struct Codegen {
     output: String,
     funcs: Vec<FuncCompiler>,
+    while_amt: u32,
 }
 
 impl Codegen {
@@ -17,6 +18,7 @@ impl Codegen {
         Self {
             output: String::new(),
             funcs: Vec::new(),
+            while_amt: 0,
         }
     }
 
@@ -34,27 +36,26 @@ impl Codegen {
         std::fs::write(path, &self.output).unwrap();
     }
 
-    fn emit_pop(&mut self) {
-        self.emit("add rsp, 8");
-    }
-
     fn emit_stmt(&mut self, stmt: Stmt) {
         // dbg!(&stmt);
         match stmt.stmt {
             StmtType::Expr(expr) => {
                 self.emit("; expression");
                 self.emit_expr(&expr);
-                self.emit_pop();
+                self.emit("pop rax");
                 self.emit("");
             }
             StmtType::Println(expr) => {
                 self.emit("; println");
                 self.emit_expr(&expr);
-                self.emit_pop();
                 self.emit("call print_int");
                 self.emit("");
             }
-            StmtType::If { condition, body, final_else } => {
+            StmtType::If {
+                condition,
+                body,
+                final_else,
+            } => {
                 self.emit_expr(&condition);
                 self.emit("pop rax");
                 self.emit("cmp rax, 1");
@@ -63,14 +64,20 @@ impl Codegen {
                 self.emit(".after_body:");
             }
             StmtType::While { condition, body } => {
-                self.emit(".start_while:");
+                let while_amt = self.while_amt;
+                self.while_amt += 1;
+
+                self.emit(&format!(".start_while{}:", while_amt));
+
                 self.emit_expr(&condition);
                 self.emit("pop rax");
-                self.emit("cmp rax, 1");
-                self.emit("jne .after_body");
+                self.emit("test rax, rax");
+                self.emit(&format!("jz .after_body{}", while_amt));
+
                 self.emit_stmt(*body);
-                self.emit("jmp .start_while");
-                self.emit(".after_body:");
+
+                self.emit(&format!("jmp .start_while{}", while_amt));
+                self.emit(&format!(".after_body{}:", while_amt));
             }
             StmtType::VarDecl { name, value, ty: _ } => {
                 self.emit(&format!("; {} declaration", name));
@@ -213,7 +220,7 @@ impl Codegen {
             BinaryOp::Equal => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("sete al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
@@ -221,7 +228,7 @@ impl Codegen {
             BinaryOp::NotEqual => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("setne al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
@@ -229,7 +236,7 @@ impl Codegen {
             BinaryOp::Less => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("setl al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
@@ -237,7 +244,7 @@ impl Codegen {
             BinaryOp::LessEqual => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("setle al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
@@ -245,7 +252,7 @@ impl Codegen {
             BinaryOp::Greater => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("setg al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
@@ -253,7 +260,7 @@ impl Codegen {
             BinaryOp::GreaterEqual => {
                 self.emit("pop rbx");
                 self.emit("pop rax");
-                self.emit("cmp rbx, rax");
+                self.emit("cmp rax, rbx");
                 self.emit("setge al");
                 self.emit("movzx rax, al");
                 self.emit("push rax");
