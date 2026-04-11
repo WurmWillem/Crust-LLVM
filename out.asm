@@ -51,41 +51,24 @@ ret
 _start:
 push rbp
 mov rbp, rsp
-sub rsp, 24
-; x declaration
-mov rax, 3
-push rax
-pop rax
-mov qword [rbp-8], rax
-
-; y declaration
-mov rax, 4
-push rax
-pop rax
-mov qword [rbp-16], rax
-
-; z declaration
-mov rax, 5
-push rax
-pop rax
-mov qword [rbp-24], rax
-
+sub rsp, 0
 ; println
-; x - y - z
-; x - y
-mov rax, [rbp-8]
+; true && true
+mov rax, 1
 push rax
-mov rax, [rbp-16]
-push rax
-pop rbx
-pop rax
-sub rax, rbx
-push rax
-mov rax, [rbp-24]
+mov rax, 1
 push rax
 pop rbx
 pop rax
-sub rax, rbx
+cmp rax, 0
+je .false
+cmp rbx, 0
+je .false
+mov rax, 1
+jmp .end
+.false:
+mov rax, 0
+.end:
 push rax
 add rsp, 8
 call print_int

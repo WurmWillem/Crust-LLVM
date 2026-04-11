@@ -106,6 +106,14 @@ impl Codegen {
                     self.emit(&format!("mov rax, {}", num));
                     self.emit("push rax");
                 }
+                Literal::True => {
+                    self.emit("mov rax, 1");
+                    self.emit("push rax");
+                }
+                Literal::False => {
+                    self.emit("mov rax, 0");
+                    self.emit("push rax");
+                }
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => {
@@ -171,14 +179,86 @@ impl Codegen {
                 self.emit("div rbx");
                 self.emit("push rax");
             }
-            BinaryOp::Equal => todo!(),
-            BinaryOp::NotEqual => todo!(),
-            BinaryOp::Less => todo!(),
-            BinaryOp::LessEqual => todo!(),
-            BinaryOp::Greater => todo!(),
-            BinaryOp::GreaterEqual => todo!(),
-            BinaryOp::And => todo!(),
-            BinaryOp::Or => todo!(),
+            BinaryOp::Equal => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("sete al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::NotEqual => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("setne al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::Less => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("setl al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::LessEqual => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("setle al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::Greater => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("setg al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::GreaterEqual => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+                self.emit("cmp rbx, rax");
+                self.emit("setge al");
+                self.emit("movzx rax, al");
+                self.emit("push rax");
+            }
+            BinaryOp::And => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+
+                self.emit("cmp rax, 0");
+                self.emit("je .false");
+                self.emit("cmp rbx, 0");
+                self.emit("je .false");
+                self.emit("mov rax, 1");
+                self.emit("jmp .end");
+                self.emit(".false:");
+                self.emit("mov rax, 0");
+                self.emit(".end:");
+                
+                self.emit("push rax");
+            }
+            BinaryOp::Or => {
+                self.emit("pop rbx");
+                self.emit("pop rax");
+
+                self.emit("cmp rax, 0");
+                self.emit("jne .true");
+                self.emit("cmp rbx, 0");
+                self.emit("jne .true");
+                self.emit("mov rax, 0");
+                self.emit("jmp .end");
+                self.emit(".true:");
+                self.emit("mov rax, 1");
+                self.emit(".end:");
+
+                self.emit("push rax");
+            }
         }
     }
 
