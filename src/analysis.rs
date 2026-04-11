@@ -253,7 +253,7 @@ impl<'a> Analyser<'a> {
     }
 
     fn analyse_expr(&mut self, expr: &mut Expr<'a>) -> Result<ValueType, SemErr> {
-        let line = expr.line;
+        let line = expr.get_line();
         let result = match &mut expr.expr {
             ExprType::Lit(lit) => lit.as_value_type(),
             ExprType::Identifier(name) => match self.symbols.resolve(name) {

@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use crate::{
     expression::{Expr, ExprType},
     func_compiler::FuncCompiler,
@@ -41,27 +43,27 @@ impl Codegen {
         match stmt.stmt {
             StmtType::Expr(expr) => {
                 self.emit("; expression");
-                self.emit_expr(expr);
+                self.emit_expr(&expr);
                 self.emit_pop();
-                self.emit("\n");
+                self.emit("");
             }
             StmtType::Println(expr) => {
                 self.emit("; println");
-                self.emit_expr(expr);
+                self.emit_expr(&expr);
                 self.emit_pop();
                 self.emit("call print_int");
-                self.emit("\n");
+                self.emit("");
             }
             StmtType::VarDecl { name, value, ty: _ } => {
-                self.emit("; var declaration");
+                self.emit(&format!("; {} declaration", name));
                 self.funcs.last_mut().unwrap().add_local(name.to_string());
-                self.emit_expr(value);
+                self.emit_expr(&value);
                 self.emit("pop rax");
 
                 let var_index = self.funcs.last().unwrap().get_local_count() * 8;
                 let emit_var = format!("mov qword [rbp-{}], rax", var_index);
                 self.emit(&emit_var);
-                self.emit("\n");
+                self.emit("");
                 // self.emit_pop();
             }
             StmtType::Func {
@@ -83,7 +85,6 @@ impl Codegen {
                 func_start.push_str(&format!("sub rsp, {}\n", local_amt * 8));
                 self.output.push_str(&func_start);
 
-
                 self.output.push_str(&output);
                 println!("{}", func_start);
                 println!("{}", output);
@@ -91,9 +92,9 @@ impl Codegen {
             _ => todo!(),
         }
     }
-    fn emit_expr(&mut self, expr: Expr) {
+    fn emit_expr(&mut self, expr: &Expr) {
         // dbg!(&expr.expr);
-        match expr.expr {
+        match &expr.expr {
             ExprType::Identifier(name) => {
                 let index = self.funcs.last().unwrap().resolve_local(name);
                 let index = index.unwrap() as i16 + 1;
@@ -108,13 +109,20 @@ impl Codegen {
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => {
-                self.emit_expr(*left);
-                self.emit_expr(*right);
+                self.emit(&format!(
+                    "; {} {} {}",
+                    left.expr.to_string_debug(),
+                    op.to_operator().to_string(),
+                    right.expr.to_string_debug()
+                ));
 
-                self.emit_binary_op(op);
+                self.emit_expr(&*left);
+                self.emit_expr(&*right);
+
+                self.emit_binary_op(*op);
             }
             ExprType::Unary { prefix, value } => {
-                self.emit_expr(*value);
+                self.emit_expr(&*value);
                 match prefix {
                     TokenType::Minus => {
                         self.emit("pop rax");

@@ -23,6 +23,18 @@ impl<'source> Literal<'source> {
             Literal::Null => ValueType::Null,
         }
     }
+    pub fn to_string(&self) -> String {
+        match self {
+            Literal::None => "None".to_string(),
+            Literal::Str(s) => s.to_string(),
+            Literal::F64(n) => n.to_string(),
+            Literal::I64(n) => n.to_string(),
+            Literal::U64(n) => n.to_string(),
+            Literal::True => "true".to_string(),
+            Literal::False => "false".to_string(),
+            Literal::Null => "null".to_string(),
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug)]

@@ -7,11 +7,14 @@ use crate::{
 #[derive(Debug, Clone)]
 pub struct Expr<'a> {
     pub expr: ExprType<'a>,
-    pub line: u32,
+    line: u32,
 }
 impl<'a> Expr<'a> {
     pub fn new(expr: ExprType<'a>, line: u32) -> Expr<'a> {
         Expr { expr, line }
+    }
+    pub fn get_line(&self) -> u32 {
+        self.line
     }
 }
 
@@ -86,4 +89,56 @@ pub enum ExprType<'a> {
         right: Box<Expr<'a>>,
     },
     This,
+}
+impl<'a> ExprType<'a> {
+    pub fn to_string_debug(&self) -> String {
+        match self {
+            ExprType::Lit(literal) => literal.to_string(),
+            ExprType::Array(exprs) => todo!(),
+            ExprType::Identifier(s) => s.to_string(),
+            ExprType::FuncCall { name, args, index } => todo!(),
+            ExprType::Cast { value, target } => todo!(),
+            ExprType::MethodCall {
+                inst,
+                property,
+                args,
+                is_static,
+            } => todo!(),
+            ExprType::MethodCallResolved {
+                inst,
+                index,
+                args,
+                use_self,
+            } => todo!(),
+            ExprType::Dot { inst, property } => todo!(),
+            ExprType::Colon { inst, property } => todo!(),
+            ExprType::DotResolved { inst, index } => todo!(),
+            ExprType::DotAssign {
+                inst,
+                property,
+                new_value,
+            } => todo!(),
+            ExprType::DotAssignResolved {
+                inst,
+                index,
+                new_value,
+            } => todo!(),
+            ExprType::Index { arr, index } => todo!(),
+            ExprType::AssignIndex {
+                arr,
+                index,
+                new_value,
+            } => todo!(),
+            ExprType::Assign { name, new_value } => todo!(),
+            ExprType::Unary { prefix, value } => todo!(),
+            ExprType::Binary { left, op, right } => format!(
+                "{} {} {}",
+                left.expr.to_string_debug(),
+                op.to_operator().to_string(),
+                right.expr.to_string_debug()
+            ),
+
+            ExprType::This => todo!(),
+        }
+    }
 }
