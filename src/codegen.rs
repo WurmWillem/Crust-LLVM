@@ -24,8 +24,8 @@ impl Codegen {
         for stmt in stmts {
             self.emit_stmt(stmt);
         }
+        // self.print_funcs_output();
         self.emit_postlude();
-        self.print_output();
     }
 
     pub fn write_to_file(&self, path: &str) {
@@ -40,15 +40,20 @@ impl Codegen {
         // dbg!(&stmt);
         match stmt.stmt {
             StmtType::Expr(expr) => {
+                self.emit("; expression");
                 self.emit_expr(expr);
                 self.emit_pop();
+                self.emit("\n");
             }
             StmtType::Println(expr) => {
+                self.emit("; println");
                 self.emit_expr(expr);
                 self.emit_pop();
                 self.emit("call print_int");
+                self.emit("\n");
             }
             StmtType::VarDecl { name, value, ty: _ } => {
+                self.emit("; var declaration");
                 self.funcs.last_mut().unwrap().add_local(name.to_string());
                 self.emit_expr(value);
                 self.emit("pop rax");
@@ -56,6 +61,7 @@ impl Codegen {
                 let var_index = self.funcs.last().unwrap().get_local_count() * 8;
                 let emit_var = format!("mov qword [rbp-{}], rax", var_index);
                 self.emit(&emit_var);
+                self.emit("\n");
                 // self.emit_pop();
             }
             StmtType::Func {
@@ -77,13 +83,16 @@ impl Codegen {
                 func_start.push_str(&format!("sub rsp, {}\n", local_amt * 8));
                 self.output.push_str(&func_start);
 
+
                 self.output.push_str(&output);
+                println!("{}", func_start);
+                println!("{}", output);
             }
             _ => todo!(),
         }
     }
     fn emit_expr(&mut self, expr: Expr) {
-        dbg!(&expr.expr);
+        // dbg!(&expr.expr);
         match expr.expr {
             ExprType::Identifier(name) => {
                 let index = self.funcs.last().unwrap().resolve_local(name);

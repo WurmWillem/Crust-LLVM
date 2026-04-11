@@ -52,18 +52,28 @@ _start:
 push rbp
 mov rbp, rsp
 sub rsp, 24
+; var declaration
 mov rax, 3
 push rax
 pop rax
 mov qword [rbp-8], rax
+
+
+; var declaration
 mov rax, 4
 push rax
 pop rax
 mov qword [rbp-16], rax
+
+
+; var declaration
 mov rax, 5
 push rax
 pop rax
 mov qword [rbp-24], rax
+
+
+; println
 mov rax, [rbp-8]
 push rax
 mov rax, [rbp-16]
@@ -80,6 +90,8 @@ sub rax, rbx
 push rax
 add rsp, 8
 call print_int
+
+
 mov rax, 60
 xor rdi, rdi
 syscall

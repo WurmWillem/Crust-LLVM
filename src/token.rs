@@ -165,10 +165,4 @@ impl TokenType {
             _ => ParseRule::new(F::Empty, F::Empty, P::Primary),
         }
     }
-    // pub fn is_value_type(&self) -> bool {
-    //     match self {
-    //         TokenType::F64 | TokenType::Bool | TokenType::Str => true,
-    //         _ => false,
-    //     }
-    // }
 }
