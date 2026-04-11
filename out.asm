@@ -52,27 +52,20 @@ _start:
 push rbp
 mov rbp, rsp
 sub rsp, 0
-; println
-; true && true
+.start_while:
 mov rax, 1
 push rax
-mov rax, 1
-push rax
-pop rbx
 pop rax
-cmp rax, 0
-je .false
-cmp rbx, 0
-je .false
+cmp rax, 1
+jne .after_body
+; println
 mov rax, 1
-jmp .end
-.false:
-mov rax, 0
-.end:
 push rax
 add rsp, 8
 call print_int
 
+jmp .start_while
+.after_body:
 mov rax, 60
 xor rdi, rdi
 syscall

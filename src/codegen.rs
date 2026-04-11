@@ -54,6 +54,24 @@ impl Codegen {
                 self.emit("call print_int");
                 self.emit("");
             }
+            StmtType::If { condition, body, final_else } => {
+                self.emit_expr(&condition);
+                self.emit("pop rax");
+                self.emit("cmp rax, 1");
+                self.emit("jne .after_body");
+                self.emit_stmt(*body);
+                self.emit(".after_body:");
+            }
+            StmtType::While { condition, body } => {
+                self.emit(".start_while:");
+                self.emit_expr(&condition);
+                self.emit("pop rax");
+                self.emit("cmp rax, 1");
+                self.emit("jne .after_body");
+                self.emit_stmt(*body);
+                self.emit("jmp .start_while");
+                self.emit(".after_body:");
+            }
             StmtType::VarDecl { name, value, ty: _ } => {
                 self.emit(&format!("; {} declaration", name));
                 self.funcs.last_mut().unwrap().add_local(name.to_string());
@@ -88,6 +106,11 @@ impl Codegen {
                 self.output.push_str(&output);
                 println!("{}", func_start);
                 println!("{}", output);
+            }
+            StmtType::Block(stmts) => {
+                for stmt in stmts {
+                    self.emit_stmt(stmt);
+                }
             }
             _ => todo!(),
         }
@@ -240,7 +263,7 @@ impl Codegen {
                 self.emit(".false:");
                 self.emit("mov rax, 0");
                 self.emit(".end:");
-                
+
                 self.emit("push rax");
             }
             BinaryOp::Or => {
