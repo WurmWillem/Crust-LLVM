@@ -3,10 +3,12 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
+use inkwell::values::BasicValueEnum;
 
 use std::error::Error;
 
-use crate::statement::Stmt;
+use crate::expression::{Expr, ExprType};
+use crate::statement::{Stmt, StmtType};
 
 /// Convenience type alias for the `sum` function.
 ///
@@ -34,12 +36,12 @@ impl<'ctx> CodeGen<'ctx> {
             execution_engine,
         };
 
-        // let sum = codegen
+        // let sum = codege
         //     .jit_compile_sum()
         //     .ok_or("Unable to JIT compile `sum`")?;
 
         let main = codegen
-            .compile_main()
+            .compile_main(stmts)
             .ok_or("Unable to JIT compile `main`")?;
 
         let x = 1u64;
@@ -60,17 +62,66 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(())
     }
-    fn compile_main(&self) -> Option<JitFunction<'_, MainFunc>> {
-    // fn compile_main(&self)  {
+    fn compile_main(&self, stmts: Vec<Stmt>) -> Option<JitFunction<'_, MainFunc>> {
+        // fn compile_main(&self)  {
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
 
         let basic_block = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(basic_block);
 
+        for stmt in &stmts {
+            self.emit_stmt(stmt);
+        }
 
-        self.builder.build_return(Some(&self.context.i64_type().const_int(0, false))).unwrap();
+        // self.builder
+        //     .build_return(Some(&self.context.i64_type().const_int(0, false)))
+        //     .unwrap();
         unsafe { self.execution_engine.get_function("main").ok() }
+    }
+
+    fn emit_stmt(&self, stmt: &Stmt) {
+        // dbg!(stmt);
+        match &stmt.stmt {
+            StmtType::Expr(expr) => {
+                let e = self.emit_expr(expr);
+                self.builder
+                    .build_return(Some(&e))
+                    .unwrap();
+            }
+            StmtType::Func {
+                name: _,
+                parameters: _,
+                body,
+                return_ty: _,
+                use_self: _,
+            } => {
+                for stmt in body {
+                    self.emit_stmt(stmt);
+                }
+            }
+            _ => todo!(),
+        }
+    }
+    fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
+        // dbg!(&expr.expr);
+        match &expr.expr {
+            ExprType::Lit(literal) => match literal {
+                crate::token::Literal::I64(n) => {
+                    self.context.i64_type().const_int(*n as u64, false).into()
+                }
+                _ => todo!(),
+            },
+            ExprType::Binary { left, op, right } => {
+                let left = self.emit_expr(left).into_int_value();
+                let right = self.emit_expr(right).into_int_value();
+                self.builder
+                    .build_int_add(left, right, "addtmp")
+                    .unwrap()
+                    .into()
+            }
+            _ => todo!(),
+        }
     }
 
     fn jit_compile_sum(&self) -> Option<JitFunction<'_, SumFunc>> {
