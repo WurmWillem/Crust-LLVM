@@ -3,8 +3,8 @@ use std::collections::HashMap;
 
 use crate::token::{Literal, Token, TokenType};
 
-pub struct Scanner<'source> {
-    source: &'source str,
+pub struct Scanner {
+    source: String,
     tokens: Vec<Token>,
 
     keywords: HashMap<String, TokenType>,
@@ -15,8 +15,8 @@ pub struct Scanner<'source> {
     had_error: bool,
 }
 
-impl<'source> Scanner<'source> {
-    pub fn new(source_file: &'source str) -> Self {
+impl Scanner {
+    pub fn new(source_file: String) -> Self {
         macro_rules! create_keywords {
             ($($k: expr, $v: ident)*) => {
                 HashMap::from([

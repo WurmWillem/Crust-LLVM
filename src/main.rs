@@ -29,7 +29,7 @@ fn main() {
         std::fs::read_to_string(&args[1]).expect(&msg)
     };
 
-    let scanner = Scanner::new(&source);
+    let scanner = Scanner::new(source);
     let tokens = match scanner.scan_tokens() {
         Ok(tokens) => tokens,
         Err(_) => {

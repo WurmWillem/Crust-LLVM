@@ -95,7 +95,7 @@ impl ExprType {
         match self {
             ExprType::Lit(literal) => literal.to_string(),
             // ExprType::Array(exprs) => todo!(),
-            // ExprType::Identifier(s) => s.to_string(),
+            ExprType::Identifier(s) => s.to_string(),
             // ExprType::FuncCall { name, args, index } => todo!(),
             // ExprType::Cast { value, target } => todo!(),
             // ExprType::MethodCall {
