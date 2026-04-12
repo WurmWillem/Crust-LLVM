@@ -17,6 +17,7 @@ mod scanner;
 mod statement;
 mod token;
 mod value;
+mod genn;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -67,7 +68,12 @@ fn main() {
         None => return,
     };
 
-    let mut codegen = Codegen::new();
-    codegen.compile_statements(statements);
-    codegen.write_to_file("out.asm");
+    // let mut codegen = Codegen::new();
+    match genn::CodeGen::compile() {
+        Ok(_) => (),
+        Err(e) => println!("{}", e),
+    }
+    // codegen.compile();
+    // codegen.compile_statements(statements);
+    // codegen.write_to_file("out.asm");
 }
