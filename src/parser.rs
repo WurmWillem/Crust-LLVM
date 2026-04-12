@@ -807,10 +807,10 @@ impl<'a> Parser<'a> {
     }
 
     fn peek(&self) -> Token<'a> {
-        self.tokens[self.current_token]
+        self.tokens[self.current_token].clone()
     }
 
     fn previous(&self) -> Token<'a> {
-        self.tokens[self.current_token - 1]
+        self.tokens[self.current_token - 1].clone()
     }
 }

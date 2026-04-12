@@ -150,7 +150,7 @@ impl<'source> Scanner<'source> {
                     return;
                 }
 
-                let str = &self.source[(self.start + 1)..self.current];
+                let str = self.source[(self.start + 1)..self.current].to_string();
                 self.add_lit_token(TokenType::StringLit, Literal::Str(str));
 
                 self.current += 1;
@@ -227,7 +227,7 @@ impl<'source> Scanner<'source> {
         self.source.as_bytes()[self.current + 1] as char
     }
 
-    fn add_lit_token(&mut self, kind: TokenType, lit: Literal<'source>) {
+    fn add_lit_token(&mut self, kind: TokenType, lit: Literal) {
         let lexeme = &self.source[self.start..self.current];
         self.tokens.push(Token::new(kind, lexeme, lit, self.line));
     }

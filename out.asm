@@ -59,10 +59,10 @@ pop rax
 mov qword [rbp-8], rax
 
 .start_while0:
-; x < 1000000000
+; x < 100000000
 mov rax, [rbp-8]
 push rax
-mov rax, 1000000000
+mov rax, 100000000
 push rax
 pop rbx
 pop rax

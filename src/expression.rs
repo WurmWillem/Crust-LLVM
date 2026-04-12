@@ -20,7 +20,7 @@ impl<'a> Expr<'a> {
 
 #[derive(Debug, Clone)]
 pub enum ExprType<'a> {
-    Lit(Literal<'a>),
+    Lit(Literal),
     Array(Vec<Expr<'a>>),
     Identifier(&'a str),
     FuncCall {

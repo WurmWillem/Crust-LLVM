@@ -1,9 +1,9 @@
 use crate::{parse_types::ParseRule, value::ValueType};
 
-#[derive(Debug, Clone, Copy)]
-pub enum Literal<'source> {
+#[derive(Debug, Clone)]
+pub enum Literal {
     None,
-    Str(&'source str),
+    Str(String),
     F64(f64),
     I64(i64),
     U64(u64),
@@ -11,8 +11,8 @@ pub enum Literal<'source> {
     False,
     Null,
 }
-impl<'source> Literal<'source> {
-    pub fn as_value_type(self) -> ValueType {
+impl Literal {
+    pub fn as_value_type(&self) -> ValueType {
         match self {
             Literal::None => unreachable!(),
             Literal::Str(_) => ValueType::Str,
@@ -37,18 +37,18 @@ impl<'source> Literal<'source> {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Debug)]
 pub struct Token<'source> {
     pub ty: TokenType,
     pub lexeme: &'source str,
-    pub literal: Literal<'source>,
+    pub literal: Literal,
     pub line: u32,
 }
 impl<'source> Token<'source> {
     pub fn new(
         kind: TokenType,
         lexeme: &'source str,
-        literal: Literal<'source>,
+        literal: Literal,
         line: u32,
     ) -> Self {
         Self {
