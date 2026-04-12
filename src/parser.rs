@@ -242,7 +242,7 @@ impl Parser {
         let func = Stmt::new(fn_ty, line);
         Ok(func)
     }
-    fn parse_parameter(&mut self) -> Result<(ValueType, &'a str), ParseErr> {
+    fn parse_parameter(&mut self) -> Result<(ValueType, String), ParseErr> {
         let var_ty = match self.advance().as_value_type() {
             Some(mut var_type) => {
                 while self.matches(TokenType::LeftBracket) {
@@ -414,7 +414,7 @@ impl Parser {
         // declare var
         let value = self.expression()?;
         let ty = ValueType::I64;
-        let kind = StmtType::VarDecl { name, value, ty };
+        let kind = StmtType::VarDecl { name: name.clone(), value, ty };
         let var = Box::new(Stmt::new(kind, line));
 
         // condition
@@ -563,11 +563,11 @@ impl Parser {
     }
     fn get_assign_shorthand(
         &mut self,
-        name: &'a str,
+        name: String,
         line: u32,
         op: BinaryOp,
     ) -> Result<ExprType, ParseErr> {
-        let var_ty = ExprType::Identifier(name);
+        let var_ty = ExprType::Identifier(name.clone());
         let var = Box::new(Expr::new(var_ty, line));
 
         let operand = Box::new(self.expression()?);
@@ -583,14 +583,14 @@ impl Parser {
 
     fn get_assign_shorthand_field(
         &mut self,
-        field_name: &'a str,
+        field_name: String,
         line: u32,
         op: BinaryOp,
         inst: Expr,
     ) -> Result<ExprType, ParseErr> {
         let ty = ExprType::Dot {
             inst: Box::new(inst.clone()),
-            property: field_name,
+            property: field_name.clone(),
         };
         let left = Box::new(Expr::new(ty, line));
 
