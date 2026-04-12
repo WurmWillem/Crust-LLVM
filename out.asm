@@ -51,7 +51,7 @@ ret
 _start:
 push rbp
 mov rbp, rsp
-sub rsp, 16
+sub rsp, 8
 ; x declaration
 mov rax, 0
 push rax
@@ -59,35 +59,20 @@ pop rax
 mov qword [rbp-8], rax
 
 .start_while0:
-mov rax, 1
-test rax, rax
-jz .after_body0
-; y declaration
-mov rax, 0
+; x < 1000000000
+mov rax, [rbp-8]
 push rax
-pop rax
-mov qword [rbp-16], rax
-
-.start_while1:
-mov rax, 1
-test rax, rax
-jz .after_body1
-; expression
-; y + 1
-mov rax, [rbp-16]
-push rax
-mov rax, 1
+mov rax, 1000000000
 push rax
 pop rbx
 pop rax
-add rax, rbx
+cmp rax, rbx
+setl al
+movzx rax, al
 push rax
 pop rax
-mov [rbp-16], rax
-pop rax
-
-jmp .start_while1
-.after_body1:
+test rax, rax
+jz .after_while_body0
 ; expression
 ; x + 1
 mov rax, [rbp-8]
@@ -100,10 +85,11 @@ add rax, rbx
 push rax
 pop rax
 mov [rbp-8], rax
+push rax
 pop rax
 
 jmp .start_while0
-.after_body0:
+.after_while_body0:
 ; println
 mov rax, [rbp-8]
 push rax

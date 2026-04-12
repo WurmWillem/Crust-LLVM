@@ -1,5 +1,3 @@
-use std::fmt::format;
-
 use crate::{
     expression::{Expr, ExprType},
     func_compiler::FuncCompiler,
@@ -10,7 +8,10 @@ use crate::{
 pub struct Codegen {
     output: String,
     funcs: Vec<FuncCompiler>,
-    while_amt: u32,
+    while_id: u32,
+    or_id: u32,
+    and_id: u32,
+    if_id: u32,
 }
 
 impl Codegen {
@@ -18,7 +19,10 @@ impl Codegen {
         Self {
             output: String::new(),
             funcs: Vec::new(),
-            while_amt: 0,
+            while_id: 0,
+            or_id: 0,
+            and_id: 0,
+            if_id: 0,
         }
     }
 
@@ -56,28 +60,31 @@ impl Codegen {
                 body,
                 final_else,
             } => {
+                let if_id = self.if_id;
+                self.if_id += 1;
+
                 self.emit_expr(&condition);
                 self.emit("pop rax");
                 self.emit("cmp rax, 1");
-                self.emit("jne .after_body");
+                self.emit(&format!("jne .after_body{}", if_id));
                 self.emit_stmt(*body);
-                self.emit(".after_body:");
+                self.emit(&format!(".after_body{}:", if_id));
             }
             StmtType::While { condition, body } => {
-                let while_amt = self.while_amt;
-                self.while_amt += 1;
+                let while_amt = self.while_id;
+                self.while_id += 1;
 
                 self.emit(&format!(".start_while{}:", while_amt));
 
                 self.emit_expr(&condition);
                 self.emit("pop rax");
                 self.emit("test rax, rax");
-                self.emit(&format!("jz .after_body{}", while_amt));
+                self.emit(&format!("jz .after_while_body{}", while_amt));
 
                 self.emit_stmt(*body);
 
                 self.emit(&format!("jmp .start_while{}", while_amt));
-                self.emit(&format!(".after_body{}:", while_amt));
+                self.emit(&format!(".after_while_body{}:", while_amt));
             }
             StmtType::VarDecl { name, value, ty: _ } => {
                 self.emit(&format!("; {} declaration", name));
@@ -183,10 +190,6 @@ impl Codegen {
         }
     }
 
-    fn print_output(&self) {
-        println!("{}", self.output);
-    }
-
     fn emit(&mut self, line: &str) {
         self.funcs.last_mut().unwrap().emit(line);
     }
@@ -267,34 +270,41 @@ impl Codegen {
                 self.emit("push rax");
             }
             BinaryOp::And => {
+                let and_id = self.and_id;
+                self.and_id += 1;
+
+                self.emit(&format!(".start_while{}:", and_id));
                 self.emit("pop rbx");
                 self.emit("pop rax");
 
                 self.emit("cmp rax, 0");
-                self.emit("je .false");
+                self.emit(&format!("je .and_false{}:", and_id));
                 self.emit("cmp rbx, 0");
-                self.emit("je .false");
+                self.emit(&format!("je .and_false{}:", and_id));
                 self.emit("mov rax, 1");
-                self.emit("jmp .end");
-                self.emit(".false:");
+                self.emit(&format!("jmp .and_end{}:", and_id));
+                self.emit(&format!(".and_false{}:", and_id));
                 self.emit("mov rax, 0");
-                self.emit(".end:");
+                self.emit(&format!(".and_end{}:", and_id));
 
                 self.emit("push rax");
             }
             BinaryOp::Or => {
+                let or_id = self.or_id;
+                self.or_id += 1;
+
                 self.emit("pop rbx");
                 self.emit("pop rax");
 
                 self.emit("cmp rax, 0");
-                self.emit("jne .true");
+                self.emit(&format!("jne .or_true{}:", or_id));
                 self.emit("cmp rbx, 0");
-                self.emit("jne .true");
+                self.emit(&format!("jne .or_true{}:", or_id));
                 self.emit("mov rax, 0");
-                self.emit("jmp .end");
-                self.emit(".true:");
+                self.emit(&format!("jmp .or_end{}:", or_id));
+                self.emit(&format!(".or_true{}:", or_id));
                 self.emit("mov rax, 1");
-                self.emit(".end:");
+                self.emit(&format!(".or_end{}:", or_id));
 
                 self.emit("push rax");
             }
