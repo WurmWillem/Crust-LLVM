@@ -69,7 +69,7 @@ fn main() {
     };
 
     // let mut codegen = Codegen::new();
-    match genn::CodeGen::compile() {
+    match genn::CodeGen::compile(statements) {
         Ok(_) => (),
         Err(e) => println!("{}", e),
     }
