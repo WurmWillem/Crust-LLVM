@@ -11,12 +11,12 @@ use colored::Colorize;
 
 const EXPECTED_SEMICOLON_MSG: &str = "Expected ';' at end of statement.";
 
-pub struct Parser<'token> {
-    tokens: Vec<Token<'token>>,
+pub struct Parser {
+    tokens: Vec<Token>,
     current_token: usize,
 }
-impl<'a> Parser<'a> {
-    pub fn compile(tokens: Vec<Token<'a>>) -> Option<Vec<Stmt<'a>>> {
+impl Parser {
+    pub fn compile(tokens: Vec<Token>) -> Option<Vec<Stmt>> {
         let mut parser = Parser {
             tokens,
             current_token: 0,
@@ -48,7 +48,7 @@ impl<'a> Parser<'a> {
         Some(statements)
     }
 
-    fn parse_precedence(&mut self, precedence: Precedence) -> Result<Expr<'a>, ParseErr> {
+    fn parse_precedence(&mut self, precedence: Precedence) -> Result<Expr, ParseErr> {
         self.advance();
         let (can_assign, mut expr) = self.parse_prefix(precedence)?;
 
@@ -62,7 +62,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn parse_prefix(&mut self, precedence: Precedence) -> Result<(bool, Expr<'a>), ParseErr> {
+    fn parse_prefix(&mut self, precedence: Precedence) -> Result<(bool, Expr), ParseErr> {
         let kind = self.previous().ty;
 
         let prefix = kind.to_parse_rule().prefix;
@@ -77,7 +77,7 @@ impl<'a> Parser<'a> {
         Ok((can_assign, expr))
     }
 
-    fn declaration(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn declaration(&mut self) -> Result<Stmt, ParseErr> {
         if let Some(var_type) = self.peek().as_value_type() {
             self.advance();
             if self.peek().ty != TokenType::Identifier && self.peek().ty != TokenType::LeftBracket {
@@ -104,7 +104,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn enum_decl(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn enum_decl(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(
             TokenType::Identifier,
             "Expected enum name after 'enum' keyword.",
@@ -128,7 +128,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::new(ty, line))
     }
 
-    fn struct_decl(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn struct_decl(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(
             TokenType::Identifier,
             "Expected struct name after 'struct' keyword.",
@@ -174,7 +174,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::new(ty, line))
     }
 
-    fn func_decl(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn func_decl(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(
             TokenType::Identifier,
             "Expected function name after 'fn' keyword.",
@@ -265,7 +265,7 @@ impl<'a> Parser<'a> {
         Ok((var_ty, name))
     }
 
-    fn var_decl(&mut self, mut ty: ValueType) -> Result<Stmt<'a>, ParseErr> {
+    fn var_decl(&mut self, mut ty: ValueType) -> Result<Stmt, ParseErr> {
         while self.matches(TokenType::LeftBracket) {
             self.consume(TokenType::RightBracket, "Expected ']' after left bracket.")?;
             ty = ValueType::Arr(Box::new(ty));
@@ -289,7 +289,7 @@ impl<'a> Parser<'a> {
         Ok(var)
     }
 
-    fn statement(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn statement(&mut self) -> Result<Stmt, ParseErr> {
         if self.matches(TokenType::Print) {
             self.print_statement()
         } else if self.matches(TokenType::LeftBrace) {
@@ -311,7 +311,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn binary(&mut self, left: Expr<'a>) -> Result<Expr<'a>, ParseErr> {
+    fn binary(&mut self, left: Expr) -> Result<Expr, ParseErr> {
         let left = Box::new(left);
         let op = BinaryOp::from_token_type(self.previous().ty);
 
@@ -326,7 +326,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn array(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn array(&mut self) -> Result<Expr, ParseErr> {
         let mut values = Vec::new();
         while !self.check(TokenType::RightBracket) {
             values.push(self.expression()?);
@@ -341,7 +341,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::new(ty, self.previous().line))
     }
 
-    fn number(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn number(&mut self) -> Result<Expr, ParseErr> {
         let kind = match self.previous().literal {
             Literal::F64(n) => ExprType::Lit(Literal::F64(n)),
             Literal::I64(n) => ExprType::Lit(Literal::I64(n)),
@@ -351,7 +351,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::new(kind, self.previous().line))
     }
 
-    fn unary(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn unary(&mut self) -> Result<Expr, ParseErr> {
         let prefix = self.previous().ty;
         let value = Box::new(self.parse_precedence(Precedence::Unary)?);
 
@@ -361,7 +361,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn literal(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn literal(&mut self) -> Result<Expr, ParseErr> {
         let literal = match self.previous().ty {
             TokenType::True => Literal::True,
             TokenType::False => Literal::False,
@@ -372,23 +372,23 @@ impl<'a> Parser<'a> {
         Ok(Expr::new(kind, self.previous().line))
     }
 
-    fn expression(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn expression(&mut self) -> Result<Expr, ParseErr> {
         self.parse_precedence(Precedence::Assignment)
     }
 
-    fn continue_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn continue_stmt(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(TokenType::Semicolon, EXPECTED_SEMICOLON_MSG)?;
         let stmt = Stmt::new(StmtType::Continue, self.previous().line);
         Ok(stmt)
     }
 
-    fn break_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn break_stmt(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(TokenType::Semicolon, EXPECTED_SEMICOLON_MSG)?;
         let stmt = Stmt::new(StmtType::Break, self.previous().line);
         Ok(stmt)
     }
 
-    fn return_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn return_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let value_ty = ExprType::Lit(Literal::Null);
         let mut value = Expr::new(value_ty, self.previous().line);
 
@@ -403,7 +403,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn for_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn for_stmt(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(TokenType::Identifier, "Expected variable name after 'for'.")?;
         let var = self.previous();
         let line = var.line;
@@ -447,7 +447,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn while_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn while_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let condition = self.expression()?;
         let body = Box::new(self.statement()?);
 
@@ -456,7 +456,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn if_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn if_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let line = self.previous().line;
 
         let condition = self.expression()?;
@@ -475,7 +475,7 @@ impl<'a> Parser<'a> {
         Ok(Stmt::new(ty, line))
     }
 
-    fn print_statement(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn print_statement(&mut self) -> Result<Stmt, ParseErr> {
         let kind = StmtType::Println(self.expression()?);
         self.consume(TokenType::Semicolon, EXPECTED_SEMICOLON_MSG)?;
 
@@ -483,7 +483,7 @@ impl<'a> Parser<'a> {
         Ok(stmt)
     }
 
-    fn expr_stmt(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn expr_stmt(&mut self) -> Result<Stmt, ParseErr> {
         let kind = StmtType::Expr(self.expression()?);
         let stmt = Stmt::new(kind, self.previous().line);
         self.consume(TokenType::Semicolon, EXPECTED_SEMICOLON_MSG)?;
@@ -521,7 +521,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn block(&mut self) -> Result<Stmt<'a>, ParseErr> {
+    fn block(&mut self) -> Result<Stmt, ParseErr> {
         let mut stmts = vec![];
         while !self.check(TokenType::RightBrace) && !self.check(TokenType::Eof) {
             stmts.push(self.declaration()?);
@@ -533,11 +533,11 @@ impl<'a> Parser<'a> {
         Ok(block)
     }
 
-    fn this(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn this(&mut self) -> Result<Expr, ParseErr> {
         Ok(Expr::new(ExprType::This, self.previous().line))
     }
 
-    fn var(&mut self, can_assign: bool) -> Result<Expr<'a>, ParseErr> {
+    fn var(&mut self, can_assign: bool) -> Result<Expr, ParseErr> {
         let name = self.previous().lexeme;
         let line = self.previous().line;
 
@@ -566,7 +566,7 @@ impl<'a> Parser<'a> {
         name: &'a str,
         line: u32,
         op: BinaryOp,
-    ) -> Result<ExprType<'a>, ParseErr> {
+    ) -> Result<ExprType, ParseErr> {
         let var_ty = ExprType::Identifier(name);
         let var = Box::new(Expr::new(var_ty, line));
 
@@ -586,8 +586,8 @@ impl<'a> Parser<'a> {
         field_name: &'a str,
         line: u32,
         op: BinaryOp,
-        inst: Expr<'a>,
-    ) -> Result<ExprType<'a>, ParseErr> {
+        inst: Expr,
+    ) -> Result<ExprType, ParseErr> {
         let ty = ExprType::Dot {
             inst: Box::new(inst.clone()),
             property: field_name,
@@ -610,7 +610,7 @@ impl<'a> Parser<'a> {
         Ok(ty)
     }
 
-    fn string(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn string(&mut self) -> Result<Expr, ParseErr> {
         let Literal::Str(value) = self.previous().literal else {
             unreachable!();
         };
@@ -618,13 +618,13 @@ impl<'a> Parser<'a> {
         Ok(Expr::new(kind, self.previous().line))
     }
 
-    fn grouping(&mut self) -> Result<Expr<'a>, ParseErr> {
+    fn grouping(&mut self) -> Result<Expr, ParseErr> {
         let expr = self.expression()?;
         self.consume(TokenType::RightParen, "Expected ')' after expression.")?;
         Ok(expr)
     }
 
-    fn execute_prefix(&mut self, fn_type: FnType, can_assign: bool) -> Result<Expr<'a>, ParseErr> {
+    fn execute_prefix(&mut self, fn_type: FnType, can_assign: bool) -> Result<Expr, ParseErr> {
         match fn_type {
             FnType::Grouping => self.grouping(),
             FnType::Array => self.array(),
@@ -638,7 +638,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn double_colon(&mut self, r#type: Expr<'a>) -> Result<Expr<'a>, ParseErr> {
+    fn double_colon(&mut self, r#type: Expr) -> Result<Expr, ParseErr> {
         self.consume(TokenType::Identifier, "Expected property name after '::'.")?;
 
         let property = self.previous();
@@ -649,7 +649,7 @@ impl<'a> Parser<'a> {
         Ok(Expr::new(ty, property.line))
     }
 
-    fn dot(&mut self, inst: Expr<'a>, can_assign: bool) -> Result<Expr<'a>, ParseErr> {
+    fn dot(&mut self, inst: Expr, can_assign: bool) -> Result<Expr, ParseErr> {
         self.consume(TokenType::Identifier, "Expected property name after '.'.")?;
         let property = self.previous();
         let line = property.line;
@@ -678,7 +678,7 @@ impl<'a> Parser<'a> {
 
         Ok(Expr::new(ty, property.line))
     }
-    fn index(&mut self, arr: Expr<'a>, can_assign: bool) -> Result<Expr<'a>, ParseErr> {
+    fn index(&mut self, arr: Expr, can_assign: bool) -> Result<Expr, ParseErr> {
         let index = Box::new(self.expression()?);
         self.consume(TokenType::RightBracket, "Expected ']' after index.")?;
 
@@ -697,7 +697,7 @@ impl<'a> Parser<'a> {
         Ok(expr)
     }
 
-    fn cast(&mut self, value: Expr<'a>) -> Result<Expr<'a>, ParseErr> {
+    fn cast(&mut self, value: Expr) -> Result<Expr, ParseErr> {
         let line = self.previous().line;
 
         if let Some(target) = self.peek().as_value_type() {
@@ -714,7 +714,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn call(&mut self, name: Expr<'a>) -> Result<Expr<'a>, ParseErr> {
+    fn call(&mut self, name: Expr) -> Result<Expr, ParseErr> {
         let mut args = Vec::new();
         while !self.check(TokenType::RightParen) {
             args.push(self.expression()?);
@@ -755,10 +755,10 @@ impl<'a> Parser<'a> {
 
     fn execute_infix(
         &mut self,
-        left: Expr<'a>,
+        left: Expr,
         fn_type: FnType,
         can_assign: bool,
-    ) -> Result<Expr<'a>, ParseErr> {
+    ) -> Result<Expr, ParseErr> {
         match fn_type {
             FnType::Binary => self.binary(left),
             FnType::Call => self.call(left),
@@ -795,7 +795,7 @@ impl<'a> Parser<'a> {
         self.peek().ty == kind
     }
 
-    fn advance(&mut self) -> Token<'a> {
+    fn advance(&mut self) -> Token {
         if self.peek().ty != TokenType::Eof {
             self.current_token += 1;
         }
@@ -806,11 +806,11 @@ impl<'a> Parser<'a> {
         self.current_token -= 1;
     }
 
-    fn peek(&self) -> Token<'a> {
+    fn peek(&self) -> Token {
         self.tokens[self.current_token].clone()
     }
 
-    fn previous(&self) -> Token<'a> {
+    fn previous(&self) -> Token {
         self.tokens[self.current_token - 1].clone()
     }
 }

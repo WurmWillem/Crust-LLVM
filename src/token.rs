@@ -38,16 +38,16 @@ impl Literal {
 }
 
 #[derive(Clone, Debug)]
-pub struct Token<'source> {
+pub struct Token {
     pub ty: TokenType,
-    pub lexeme: &'source str,
+    pub lexeme: String,
     pub literal: Literal,
     pub line: u32,
 }
-impl<'source> Token<'source> {
+impl Token {
     pub fn new(
         kind: TokenType,
-        lexeme: &'source str,
+        lexeme: String,
         literal: Literal,
         line: u32,
     ) -> Self {

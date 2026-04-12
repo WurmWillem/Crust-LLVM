@@ -50,9 +50,9 @@ impl core::fmt::Display for Operator {
 }
 
 #[derive(Debug, Clone)]
-pub struct FuncData<'a> {
-    pub parameters: Vec<(ValueType, &'a str)>,
-    pub body: Vec<Stmt<'a>>,
+pub struct FuncData {
+    pub parameters: Vec<(ValueType, String)>,
+    pub body: Vec<Stmt>,
     pub return_ty: ValueType,
     pub line: u32,
     pub use_self: bool,
@@ -64,11 +64,11 @@ pub struct NatFuncData {
     pub use_self: bool,
 }
 #[derive(Debug)]
-pub struct NatStructData<'a> {
-    pub fields: Vec<(ValueType, &'a str)>,
-    pub methods: Vec<(&'a str, NatFuncData)>,
+pub struct NatStructData {
+    pub fields: Vec<(ValueType, String)>,
+    pub methods: Vec<(String, NatFuncData)>,
 }
-impl<'a> NatStructData<'a> {
+impl NatStructData {
     pub fn get_method_data(
         &self,
         name: &str,
@@ -86,12 +86,12 @@ impl<'a> NatStructData<'a> {
     }
 }
 #[derive(Debug)]
-pub struct StructData<'a> {
-    pub fields: Vec<(ValueType, &'a str)>,
-    pub methods: Vec<(&'a str, FuncData<'a>)>,
+pub struct StructData {
+    pub fields: Vec<(ValueType, String)>,
+    pub methods: Vec<(String, FuncData)>,
 }
-impl<'a> StructData<'a> {
-    pub fn new(fields: Vec<(ValueType, &'a str)>) -> Self {
+impl StructData {
+    pub fn new(fields: Vec<(ValueType, String)>) -> Self {
         Self {
             fields,
             methods: vec![],
@@ -130,12 +130,12 @@ impl<'a> StructData<'a> {
     }
 }
 
-pub struct EnityData<'a> {
-    pub funcs: HashMap<&'a str, FuncData<'a>>,
-    pub structs: HashMap<&'a str, StructData<'a>>,
-    pub enums: HashMap<&'a str, Vec<&'a str>>,
+pub struct EnityData {
+    pub funcs: HashMap<String, FuncData>,
+    pub structs: HashMap<String, StructData>,
+    pub enums: HashMap<String, Vec<String>>,
 }
-impl<'a> EnityData<'a> {
+impl EnityData {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),
@@ -146,8 +146,7 @@ impl<'a> EnityData<'a> {
 
     pub fn resolve_value_ty(&self, ty: &mut ValueType) {
         if let ValueType::UnknownType(name) = ty {
-            if self.structs.contains_key(name as &str)
-            {
+            if self.structs.contains_key(name as &str) {
                 *ty = ValueType::Struct(name.clone())
             } else if self.enums.contains_key(name as &str) {
                 *ty = ValueType::Enum(name.clone())
@@ -157,21 +156,21 @@ impl<'a> EnityData<'a> {
 }
 
 #[derive(Debug, Clone)]
-pub struct Symbol<'a> {
-    name: &'a str,
+pub struct Symbol {
+    name: String,
     pub ty: ValueType,
 }
-impl<'a> Symbol<'a> {
-    pub fn new(name: &'a str, ty: ValueType) -> Self {
+impl Symbol {
+    pub fn new(name: String, ty: ValueType) -> Self {
         Self { name, ty }
     }
 }
 
 #[derive(Debug)]
-pub struct SemanticScope<'a> {
-    stack: Vec<HashMap<&'a str, Symbol<'a>>>,
+pub struct SemanticScope {
+    stack: Vec<HashMap<String, Symbol>>,
 }
-impl<'a> SemanticScope<'a> {
+impl SemanticScope {
     pub fn new() -> Self {
         Self {
             stack: vec![HashMap::new()],
@@ -185,19 +184,20 @@ impl<'a> SemanticScope<'a> {
         self.stack.pop();
     }
 
-    pub fn declare(&mut self, symbol: Symbol<'a>, line: u32) -> Result<(), SemErr> {
+    pub fn declare(&mut self, symbol: Symbol, line: u32) -> Result<(), SemErr> {
+        // TODO: can this really be unwrap?
         let current = self.stack.last_mut().unwrap();
-        if current.contains_key(symbol.name) {
+        if current.contains_key(&symbol.name) {
             return Err(SemErr::new(
                 line,
                 SemErrType::AlreadyDefinedVar(symbol.name.to_string()),
             ));
         }
-        current.insert(symbol.name, symbol);
+        current.insert(symbol.name.clone(), symbol);
         Ok(())
     }
 
-    pub fn resolve(&self, name: &str) -> Option<Symbol<'a>> {
+    pub fn resolve(&self, name: &str) -> Option<Symbol> {
         for scope in self.stack.iter().rev() {
             if let Some(sym) = scope.get(name) {
                 return Some(sym.clone());

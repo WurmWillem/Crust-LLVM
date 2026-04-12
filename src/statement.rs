@@ -1,57 +1,57 @@
 use crate::{expression::Expr, value::ValueType};
 
 #[derive(Debug, Clone)]
-pub struct Stmt<'a> {
-    pub stmt: StmtType<'a>,
+pub struct Stmt {
+    pub stmt: StmtType,
     pub line: u32,
 }
-impl<'a> Stmt<'a> {
-    pub fn new(stmt: StmtType<'a>, line: u32) -> Stmt<'a> {
+impl Stmt {
+    pub fn new(stmt: StmtType, line: u32) -> Stmt {
         Stmt { stmt, line }
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum StmtType<'a> {
-    Expr(Expr<'a>),
+pub enum StmtType {
+    Expr(Expr),
     VarDecl {
-        name: &'a str,
-        value: Expr<'a>,
+        name: String,
+        value: Expr,
         ty: ValueType,
     },
-    Println(Expr<'a>),
-    Return(Expr<'a>),
+    Println(Expr),
+    Return(Expr),
     Break,
     Continue,
-    Block(Vec<Stmt<'a>>),
+    Block(Vec<Stmt>),
     If {
-        condition: Expr<'a>,
-        body: Box<Stmt<'a>>,
-        final_else: Option<Box<Stmt<'a>>>,
+        condition: Expr,
+        body: Box<Stmt>,
+        final_else: Option<Box<Stmt>>,
     },
     While {
-        condition: Expr<'a>,
-        body: Box<Stmt<'a>>,
+        condition: Expr,
+        body: Box<Stmt>,
     },
     For {
-        var: Box<Stmt<'a>>,
-        condition: Expr<'a>,
-        body: Box<Stmt<'a>>,
+        var: Box<Stmt>,
+        condition: Expr,
+        body: Box<Stmt>,
     },
     Func {
-        name: &'a str,
-        parameters: Vec<(ValueType, &'a str)>,
-        body: Vec<Stmt<'a>>,
+        name: String,
+        parameters: Vec<(ValueType, String)>,
+        body: Vec<Stmt>,
         return_ty: ValueType,
         use_self: bool,
     },
     Struct {
-        name: &'a str,
-        fields: Vec<(ValueType, &'a str)>,
-        methods: Vec<Stmt<'a>>,
+        name: String,
+        fields: Vec<(ValueType, String)>,
+        methods: Vec<Stmt>,
     },
     Enum {
-        name: &'a str,
-        variants: Vec<&'a str>,
+        name: String,
+        variants: Vec<String>,
     },
 }

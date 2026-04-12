@@ -8,15 +8,15 @@ use crate::{
     value::ValueType,
 };
 
-pub struct Analyser<'a> {
-    entities: EnityData<'a>,
-    symbols: SemanticScope<'a>,
+pub struct Analyser {
+    entities: EnityData,
+    symbols: SemanticScope,
     current_return_ty: Option<ValueType>,
     current_use_self: bool,
     return_stmt_found: bool,
-    current_struct: Option<&'a str>,
+    current_struct: Option<String>,
 }
-impl<'a> Analyser<'a> {
+impl Analyser {
     fn new() -> Self {
         Self {
             symbols: SemanticScope::new(),
@@ -27,7 +27,7 @@ impl<'a> Analyser<'a> {
             current_use_self: false,
         }
     }
-    pub fn analyse_stmts(stmts: &mut Vec<Stmt<'a>>) -> Option<EnityData<'a>> {
+    pub fn analyse_stmts(stmts: &mut Vec<Stmt>) -> Option<EnityData> {
         let mut analyser = Analyser::new();
         if let Err(err) = analyser.init_type_data(stmts) {
             err.print();
@@ -44,14 +44,14 @@ impl<'a> Analyser<'a> {
         Some(analyser.entities)
     }
 
-    fn init_type_data(&mut self, stmts: &mut Vec<Stmt<'a>>) -> Result<(), SemErr> {
+    fn init_type_data(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), SemErr> {
         for stmt in stmts {
             let line = stmt.line;
             if let StmtType::Enum { name, variants } = &stmt.stmt {
                 if self
                     .entities
                     .enums
-                    .insert(*name, variants.clone())
+                    .insert(name.to_string(), variants.clone())
                     .is_some()
                 {
                     let err_ty = SemErrType::AlreadyDefinedEnum(name.to_string());
@@ -73,7 +73,7 @@ impl<'a> Analyser<'a> {
                     use_self: *use_self,
                 };
 
-                if self.entities.funcs.insert(*name, func_data).is_some() {
+                if self.entities.funcs.insert(name.to_string(), func_data).is_some() {
                     let err_ty = SemErrType::AlreadyDefinedFunc(name.to_string());
                     return Err(SemErr::new(line, err_ty));
                 }
@@ -88,11 +88,11 @@ impl<'a> Analyser<'a> {
                     let ty = SemErrType::StructDefInFunc(name.to_string());
                     return Err(SemErr::new(line, ty));
                 }
-                self.current_struct = Some(name);
+                self.current_struct = Some(name.to_string());
                 let struct_data = StructData::new(fields.clone());
                 let mut method_data = vec![];
 
-                if self.entities.structs.insert(*name, struct_data).is_some() {
+                if self.entities.structs.insert(name.to_string(), struct_data).is_some() {
                     let err_ty = SemErrType::AlreadyDefinedStruct(name.to_string());
                     return Err(SemErr::new(line, err_ty));
                 }
@@ -113,7 +113,7 @@ impl<'a> Analyser<'a> {
                             line: stmt.line,
                             use_self: *use_self,
                         };
-                        method_data.push((*name, func_data));
+                        method_data.push((name.to_string(), func_data));
                     } else {
                         unreachable!()
                     }
@@ -144,7 +144,7 @@ impl<'a> Analyser<'a> {
         Ok(())
     }
 
-    fn analyse_stmt(&mut self, stmt: &mut Stmt<'a>) -> Result<(), SemErr> {
+    fn analyse_stmt(&mut self, stmt: &mut Stmt) -> Result<(), SemErr> {
         let line = stmt.line;
         match &mut stmt.stmt {
             StmtType::Expr(expr) => {
@@ -172,7 +172,7 @@ impl<'a> Analyser<'a> {
                     return Err(SemErr::new(line, err_ty));
                 }
 
-                self.symbols.declare(Symbol::new(name, ty.clone()), line)?;
+                self.symbols.declare(Symbol::new(name.to_string(), ty.clone()), line)?;
             }
             StmtType::Println(expr) => {
                 self.analyse_expr(expr)?;
@@ -252,7 +252,7 @@ impl<'a> Analyser<'a> {
         Ok(())
     }
 
-    fn analyse_expr(&mut self, expr: &mut Expr<'a>) -> Result<ValueType, SemErr> {
+    fn analyse_expr(&mut self, expr: &mut Expr) -> Result<ValueType, SemErr> {
         let line = expr.get_line();
         let result = match &mut expr.expr {
             ExprType::Lit(lit) => lit.as_value_type(),
@@ -346,11 +346,11 @@ impl<'a> Analyser<'a> {
 
     fn get_enum_variant_data(
         &self,
-        inst: &Expr<'a>,
+        inst: &Expr,
         property: &str,
         line: u32,
     ) -> Result<(ValueType, u64), SemErr> {
-        let ExprType::Identifier(name) = inst.expr else {
+        let ExprType::Identifier(ref name) = inst.expr else {
             let ty = SemErrType::InvalidStaticAccess;
             return Err(SemErr::new(line, ty));
         };
@@ -371,9 +371,9 @@ impl<'a> Analyser<'a> {
     fn analyse_func_stmt(
         &mut self,
         return_ty: ValueType,
-        parameters: &mut Vec<(ValueType, &'a str)>,
+        parameters: &mut Vec<(ValueType, String)>,
         line: u32,
-        body: &mut [Stmt<'a>],
+        body: &mut [Stmt],
         name: &str,
         use_self: bool,
     ) -> Result<(), SemErr> {
@@ -392,7 +392,7 @@ impl<'a> Analyser<'a> {
 
         for (ty, name) in parameters {
             self.entities.resolve_value_ty(ty);
-            self.symbols.declare(Symbol::new(name, ty.clone()), line)?;
+            self.symbols.declare(Symbol::new(name.to_string(), ty.clone()), line)?;
         }
         self.return_stmt_found = false;
 
@@ -420,7 +420,7 @@ impl<'a> Analyser<'a> {
     fn analyse_assign(
         &mut self,
         name: &str,
-        value: &mut Box<Expr<'a>>,
+        value: &mut Box<Expr>,
         line: u32,
     ) -> Result<ValueType, SemErr> {
         match self.symbols.resolve(name) {
@@ -444,10 +444,10 @@ impl<'a> Analyser<'a> {
 
     fn analyse_method_call(
         &mut self,
-        inst: &mut Box<Expr<'a>>,
+        inst: &mut Box<Expr>,
         property: &str,
         line: u32,
-        args: &mut [Expr<'a>],
+        args: &mut [Expr],
         is_static: bool,
     ) -> Result<(u8, ValueType, bool), SemErr> {
         let name = self.get_inst_or_struct_name(inst, is_static, line)?;
@@ -479,12 +479,12 @@ impl<'a> Analyser<'a> {
     }
     fn get_inst_or_struct_name(
         &mut self,
-        inst: &mut Box<Expr<'a>>,
+        inst: &mut Box<Expr>,
         is_static: bool,
         line: u32,
     ) -> Result<String, SemErr> {
         if let ExprType::This = inst.expr {
-            let Some(name) = self.current_struct else {
+            let Some(ref name) = self.current_struct else {
                 let ty = SemErrType::SelfOutsideStruct;
                 return Err(SemErr::new(line, ty));
             };
@@ -501,7 +501,7 @@ impl<'a> Analyser<'a> {
             return Ok(name.to_string());
         }
         // dbg!(&inst);
-        if let ExprType::Identifier(name) = inst.expr {
+        if let ExprType::Identifier(ref name) = inst.expr {
             if self.entities.structs.contains_key(name)
             {
                 return Ok(name.to_string());
@@ -525,8 +525,8 @@ impl<'a> Analyser<'a> {
 
     fn analyse_assign_index(
         &mut self,
-        arr: &mut Box<Expr<'a>>,
-        value: &mut Box<Expr<'a>>,
+        arr: &mut Box<Expr>,
+        value: &mut Box<Expr>,
         line: u32,
     ) -> Result<ValueType, SemErr> {
         let arr = self.analyse_expr(arr)?;
@@ -548,7 +548,7 @@ impl<'a> Analyser<'a> {
 
     fn analyse_array_expr(
         &mut self,
-        values: &mut [Expr<'a>],
+        values: &mut [Expr],
         line: u32,
     ) -> Result<ValueType, SemErr> {
         if values.is_empty() {
@@ -568,8 +568,8 @@ impl<'a> Analyser<'a> {
 
     fn analyse_binary(
         &mut self,
-        left: &mut Box<Expr<'a>>,
-        right: &mut Box<Expr<'a>>,
+        left: &mut Box<Expr>,
+        right: &mut Box<Expr>,
         op: BinaryOp,
         line: u32,
     ) -> Result<ValueType, SemErr> {
@@ -610,7 +610,7 @@ impl<'a> Analyser<'a> {
 
     fn analyse_unary(
         &mut self,
-        value: &mut Box<Expr<'a>>,
+        value: &mut Box<Expr>,
         prefix: TokenType,
         line: u32,
     ) -> Result<ValueType, SemErr> {
@@ -639,7 +639,7 @@ impl<'a> Analyser<'a> {
 
     fn check_if_params_and_args_correspond(
         &mut self,
-        args: &mut [Expr<'a>],
+        args: &mut [Expr],
         parameters: Vec<ValueType>,
         name: String,
         line: u32,
@@ -684,13 +684,13 @@ impl<'a> Analyser<'a> {
 
     fn analyse_dot(
         &mut self,
-        new_value: Option<&mut Box<Expr<'a>>>,
-        inst: &mut Box<Expr<'a>>,
+        new_value: Option<&mut Box<Expr>>,
+        inst: &mut Box<Expr>,
         line: u32,
         property: &str,
-    ) -> Result<(ValueType, ExprType<'a>), SemErr> {
+    ) -> Result<(ValueType, ExprType), SemErr> {
         let name = if let ExprType::This = inst.expr {
-            let Some(name) = self.current_struct else {
+            let Some(ref name) = self.current_struct else {
                 let ty = SemErrType::SelfOutsideStruct;
                 return Err(SemErr::new(line, ty));
             };
@@ -741,7 +741,7 @@ impl<'a> Analyser<'a> {
 
     fn get_called_func_data(
         &mut self,
-        name: &'a str,
+        name: &String,
         line: u32,
     ) -> Result<(ValueType, Vec<ValueType>), SemErr> {
         if let Some(data) = self.entities.structs.get(name) {

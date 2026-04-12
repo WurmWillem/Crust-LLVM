@@ -5,7 +5,7 @@ use crate::token::{Literal, Token, TokenType};
 
 pub struct Scanner<'source> {
     source: &'source str,
-    tokens: Vec<Token<'source>>,
+    tokens: Vec<Token>,
 
     keywords: HashMap<String, TokenType>,
 
@@ -45,14 +45,14 @@ impl<'source> Scanner<'source> {
         }
     }
 
-    pub fn scan_tokens(mut self) -> Result<Vec<Token<'source>>, ()> {
+    pub fn scan_tokens(mut self) -> Result<Vec<Token>, ()> {
         while !self.at_end_input() {
             self.start = self.current;
             self.scan_token();
         }
 
         self.tokens
-            .push(Token::new(TokenType::Eof, "", Literal::None, self.line));
+            .push(Token::new(TokenType::Eof, "".to_string(), Literal::None, self.line));
 
         if self.had_error {
             Err(())
@@ -228,7 +228,7 @@ impl<'source> Scanner<'source> {
     }
 
     fn add_lit_token(&mut self, kind: TokenType, lit: Literal) {
-        let lexeme = &self.source[self.start..self.current];
+        let lexeme = self.source[self.start..self.current].to_string();
         self.tokens.push(Token::new(kind, lexeme, lit, self.line));
     }
 
