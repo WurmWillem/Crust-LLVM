@@ -16,6 +16,11 @@ use crate::statement::{Stmt, StmtType};
 /// do `unsafe` operations internally.
 type MainFunc = unsafe extern "C" fn() -> i64;
 
+#[unsafe(no_mangle)]
+pub extern "C" fn print_i64(x: i64) {
+    println!("{}", x);
+}
+
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -35,34 +40,58 @@ impl<'ctx> CodeGen<'ctx> {
             execution_engine,
         };
 
-        // let sum = codege
-        //     .jit_compile_sum()
-        //     .ok_or("Unable to JIT compile `sum`")?;
+        codegen.build_main(stmts)?;
 
-        let main = codegen
-            .compile_main(stmts)
-            .ok_or("Unable to JIT compile `main`")?;
+        let print_fn = codegen.module.get_function("print_i64").unwrap();
+        codegen
+            .execution_engine
+            .add_global_mapping(&print_fn, print_i64 as usize);
 
-        let x = 1u64;
-        let y = 2u64;
-        let z = 3u64;
-
-        unsafe {
-            println!("main = {}", main.call());
-            // assert_eq!(sum.call(x, y, z), x + y + z);
-        }
-
-        // unsafe {
-        //     println!("{} + {} + {} = {}", x, y, z, sum.call(x, y, z));
-        //     assert_eq!(sum.call(x, y, z), x + y + z);
-        // }
+        let main: JitFunction<MainFunc> =
+            unsafe { codegen.execution_engine.get_function("main").ok() }
+                .ok_or("Unable to get JIT function")?;
 
         codegen.module.print_to_stderr();
+
+        unsafe {
+            println!("main returns '{}'", main.call());
+        }
+
+        Ok(())
+    }
+
+    fn build_main(
+        &self,
+        stmts: Vec<Stmt>,
+    ) -> Result<(), Box<dyn Error>> {
+        // Declare external print_i64
+        let i64_type = self.context.i64_type();
+        let void_type = self.context.void_type();
+        let print_type = void_type.fn_type(&[i64_type.into()], false);
+        self.module.add_function("print_i64", print_type, None);
+
+        // Create main function
+        let fn_type = self.context.i64_type().fn_type(&[], false);
+        let function = self.module.add_function("main", fn_type, None);
+        let basic_block = self.context.append_basic_block(function, "entry");
+        self.builder.position_at_end(basic_block);
+
+        for stmt in &stmts {
+            self.emit_stmt(stmt);
+        }
+
+        self.builder
+            .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
 
         Ok(())
     }
     fn compile_main(&self, stmts: Vec<Stmt>) -> Option<JitFunction<'_, MainFunc>> {
-        // fn compile_main(&self)  {
+        // add print function
+        let i64_type = self.context.i64_type();
+        let void_type = self.context.void_type();
+        let print_type = void_type.fn_type(&[i64_type.into()], false);
+        self.module.add_function("print_i64", print_type, None);
+
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
 
@@ -73,9 +102,9 @@ impl<'ctx> CodeGen<'ctx> {
             self.emit_stmt(stmt);
         }
 
-        // self.builder
-        //     .build_return(Some(&self.context.i64_type().const_int(0, false)))
-        //     .unwrap();
+        self.builder
+            .build_return(Some(&self.context.i64_type().const_int(0, false)))
+            .unwrap();
         unsafe { self.execution_engine.get_function("main").ok() }
     }
 
@@ -83,9 +112,18 @@ impl<'ctx> CodeGen<'ctx> {
         // dbg!(stmt);
         match &stmt.stmt {
             StmtType::Expr(expr) => {
-                let e = self.emit_expr(expr);
-                self.builder.build_return(Some(&e)).unwrap();
+                let _ = self.emit_expr(expr);
+                // self.builder.build_return(Some(&e)).unwrap();
             }
+            StmtType::Println(expr) => {
+                let value = self.emit_expr(expr);
+                let print_fn = self.module.get_function("print_i64").unwrap();
+
+                self.builder
+                    .build_call(print_fn, &[value.into()], "printtmp")
+                    .unwrap();
+            }
+
             StmtType::Func {
                 name: _,
                 parameters: _,
@@ -175,11 +213,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .build_and(left, right, "andtmp")
                         .unwrap()
                         .into(),
-                    BinaryOp::Or => self
-                        .builder
-                        .build_or(left, right, "ortmp")
-                        .unwrap()
-                        .into(),
+                    BinaryOp::Or => self.builder.build_or(left, right, "ortmp").unwrap().into(),
                 }
             }
             _ => todo!(),
