@@ -14,7 +14,6 @@ use crate::statement::{Stmt, StmtType};
 ///
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
 /// do `unsafe` operations internally.
-type SumFunc = unsafe extern "C" fn(u64, u64, u64) -> u64;
 type MainFunc = unsafe extern "C" fn() -> i64;
 
 pub struct CodeGen<'ctx> {
@@ -85,9 +84,7 @@ impl<'ctx> CodeGen<'ctx> {
         match &stmt.stmt {
             StmtType::Expr(expr) => {
                 let e = self.emit_expr(expr);
-                self.builder
-                    .build_return(Some(&e))
-                    .unwrap();
+                self.builder.build_return(Some(&e)).unwrap();
             }
             StmtType::Func {
                 name: _,
@@ -105,42 +102,87 @@ impl<'ctx> CodeGen<'ctx> {
     }
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
+        use crate::token::Literal;
         match &expr.expr {
             ExprType::Lit(literal) => match literal {
-                crate::token::Literal::I64(n) => {
-                    self.context.i64_type().const_int(*n as u64, false).into()
-                }
+                Literal::I64(n) => self.context.i64_type().const_int(*n as u64, false).into(),
+                // Literal::U64(n) => self.context.u64_type().const_int(*n as u64, false).into(),
+                Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
+                Literal::True => self.context.bool_type().const_int(1, false).into(),
+                Literal::False => self.context.bool_type().const_int(0, false).into(),
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => {
                 let left = self.emit_expr(left).into_int_value();
                 let right = self.emit_expr(right).into_int_value();
-                self.builder
-                    .build_int_add(left, right, "addtmp")
-                    .unwrap()
-                    .into()
+
+                use crate::parse_types::BinaryOp;
+                use inkwell::IntPredicate::*;
+
+                match op {
+                    BinaryOp::Add => self
+                        .builder
+                        .build_int_add(left, right, "addtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Sub => self
+                        .builder
+                        .build_int_sub(left, right, "subtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Mul => self
+                        .builder
+                        .build_int_mul(left, right, "multmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Div => self
+                        .builder
+                        .build_int_signed_div(left, right, "divtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_int_compare(EQ, left, right, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_int_compare(NE, left, right, "neqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Less => self
+                        .builder
+                        .build_int_compare(SLT, left, right, "slttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::LessEqual => self
+                        .builder
+                        .build_int_compare(SLE, left, right, "sletmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Greater => self
+                        .builder
+                        .build_int_compare(SGT, left, right, "sgttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::GreaterEqual => self
+                        .builder
+                        .build_int_compare(SGE, left, right, "sgetmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::And => self
+                        .builder
+                        .build_and(left, right, "andtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Or => self
+                        .builder
+                        .build_or(left, right, "ortmp")
+                        .unwrap()
+                        .into(),
+                }
             }
             _ => todo!(),
         }
-    }
-
-    fn jit_compile_sum(&self) -> Option<JitFunction<'_, SumFunc>> {
-        let i64_type = self.context.i64_type();
-        let fn_type = i64_type.fn_type(&[i64_type.into(), i64_type.into(), i64_type.into()], false);
-        let function = self.module.add_function("sum", fn_type, None);
-        let basic_block = self.context.append_basic_block(function, "entry");
-
-        self.builder.position_at_end(basic_block);
-
-        let x = function.get_nth_param(0)?.into_int_value();
-        let y = function.get_nth_param(1)?.into_int_value();
-        let z = function.get_nth_param(2)?.into_int_value();
-
-        let sum = self.builder.build_int_add(x, y, "sum").unwrap();
-        let sum = self.builder.build_int_add(sum, z, "sum").unwrap();
-
-        self.builder.build_return(Some(&sum)).unwrap();
-
-        unsafe { self.execution_engine.get_function("sum").ok() }
     }
 }
