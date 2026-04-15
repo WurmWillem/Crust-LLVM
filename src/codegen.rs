@@ -22,6 +22,10 @@ type MainFunc = unsafe extern "C" fn() -> i64;
 pub extern "C" fn print_i64(x: i64) {
     println!("{}", x);
 }
+#[unsafe(no_mangle)]
+pub extern "C" fn print_f64(x: f64) {
+    println!("{}", x);
+}
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
@@ -49,10 +53,15 @@ impl<'ctx> CodeGen<'ctx> {
 
         codegen.build_main(stmts)?;
 
-        let print_fn = codegen.module.get_function("print_i64").unwrap();
+        let print_i64_fn = codegen.module.get_function("print_i64").unwrap();
         codegen
             .execution_engine
-            .add_global_mapping(&print_fn, print_i64 as usize);
+            .add_global_mapping(&print_i64_fn, print_i64 as usize);
+
+        let print_f64_fn = codegen.module.get_function("print_f64").unwrap();
+        codegen
+            .execution_engine
+            .add_global_mapping(&print_f64_fn, print_f64 as usize);
 
         let main: JitFunction<MainFunc> =
             unsafe { codegen.execution_engine.get_function("main").ok() }
@@ -71,8 +80,11 @@ impl<'ctx> CodeGen<'ctx> {
         // Declare external print_i64
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
+
         let print_type = void_type.fn_type(&[i64_type.into()], false);
         self.module.add_function("print_i64", print_type, None);
+        let print_f64_type = void_type.fn_type(&[self.context.f64_type().into()], false);
+        self.module.add_function("print_f64", print_f64_type, None);
 
         // Create main function
         let fn_type = self.context.i64_type().fn_type(&[], false);
@@ -109,7 +121,16 @@ impl<'ctx> CodeGen<'ctx> {
             }
             StmtType::Println(expr) => {
                 let value = self.emit_expr(expr);
-                let print_fn = self.module.get_function("print_i64").unwrap();
+                let print_fn = match expr.end_ty {
+                    ValueType::Null => todo!(),
+                    ValueType::Bool => self.module.get_function("print_i64").unwrap(),
+                    ValueType::F64 => self.module.get_function("print_f64").unwrap(),
+                    ValueType::I64 => self.module.get_function("print_i64").unwrap(),
+                    ValueType::U64 => todo!(),
+                    ValueType::Str => todo!(),
+                    _ => unreachable!()
+                };
+                self.module.get_function("print_i64").unwrap();
 
                 self.builder
                     .build_call(print_fn, &[value.into()], "printtmp")

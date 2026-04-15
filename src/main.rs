@@ -6,17 +6,15 @@ use colored::Colorize;
 
 mod analysis;
 mod analysis_types;
-mod codegen;
 mod error;
 mod expression;
-mod func_compiler;
 mod parse_types;
 mod parser;
 mod scanner;
 mod statement;
 mod token;
 mod value;
-mod genn;
+mod codegen;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();
@@ -68,7 +66,7 @@ fn main() {
     };
 
     // let mut codegen = Codegen::new();
-    match genn::CodeGen::compile(statements) {
+    match codegen::CodeGen::compile(statements) {
         Ok(_) => (),
         Err(e) => println!("{}", e),
     }
