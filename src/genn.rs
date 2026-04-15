@@ -1,9 +1,9 @@
-use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
+use inkwell::types::BasicType;
 use inkwell::values::{BasicValueEnum, PointerValue};
 
 use std::collections::HashMap;
@@ -67,16 +67,12 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    fn build_main(
-        &mut self,
-        mut stmts: Vec<Stmt>,
-    ) -> Result<(), Box<dyn Error>> {
+    fn build_main(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
         // Declare external print_i64
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
         let print_type = void_type.fn_type(&[i64_type.into()], false);
         self.module.add_function("print_i64", print_type, None);
-
 
         // Create main function
         let fn_type = self.context.i64_type().fn_type(&[], false);
@@ -85,7 +81,6 @@ impl<'ctx> CodeGen<'ctx> {
         let basic_block = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(basic_block);
         self.alloc_builder.position_at_end(basic_block);
-
 
         for stmt in &mut stmts {
             self.emit_stmt(stmt);
@@ -141,7 +136,17 @@ impl<'ctx> CodeGen<'ctx> {
         match &expr.expr {
             ExprType::Identifier(name) => {
                 let ptr = self.declared_vars.get(name).unwrap();
-                self.builder.build_load(self.context.i64_type(), *ptr, name).unwrap()
+                self.builder
+                    .build_load(self.context.i64_type(), *ptr, name)
+                    .unwrap()
+            }
+            ExprType::Assign { name, new_value } => {
+                let ptr = self.declared_vars.get(name).unwrap();
+                let val = self.emit_expr(new_value).into_int_value();
+
+                self.builder.build_store(*ptr, val).unwrap();
+
+                val.into()
             }
             ExprType::Lit(literal) => match literal {
                 Literal::I64(n) => self.context.i64_type().const_int(*n as u64, false).into(),
