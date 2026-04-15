@@ -1,6 +1,5 @@
 fn main() {
-    int x = 3;
-    pr x;
-    x = 2;
-    pr x;
+    if true > true {
+
+    }
 }

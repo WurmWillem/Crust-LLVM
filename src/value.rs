@@ -2,8 +2,9 @@ use std::fmt::{self};
 
 #[derive(Debug, Clone, PartialEq, PartialOrd)]
 pub enum ValueType {
-    Any, // useful as generic type for functions like println()
     Null,
+    // TODO: consider reworking/removing this
+    Any, // useful as generic type for functions like println()
     Bool,
     F64,
     I64,

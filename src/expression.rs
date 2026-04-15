@@ -8,10 +8,11 @@ use crate::{
 pub struct Expr {
     pub expr: ExprType,
     line: u32,
+    pub end_ty: ValueType,
 }
 impl Expr {
     pub fn new(expr: ExprType, line: u32) -> Expr {
-        Expr { expr, line }
+        Expr { expr, line, end_ty: ValueType::Any }
     }
     pub fn get_line(&self) -> u32 {
         self.line

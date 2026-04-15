@@ -341,6 +341,8 @@ impl Analyser {
             ExprType::MethodCallResolved { .. } => unreachable!(),
             ExprType::DotAssignResolved { .. } => unreachable!(),
         };
+
+        expr.end_ty = result.clone();
         Ok(result)
     }
 
