@@ -185,7 +185,6 @@ impl SemanticScope {
     }
 
     pub fn declare(&mut self, symbol: Symbol, line: u32) -> Result<(), SemErr> {
-        // TODO: can this really be unwrap?
         let current = self.stack.last_mut().unwrap();
         if current.contains_key(&symbol.name) {
             return Err(SemErr::new(

@@ -62,7 +62,7 @@ fn main() {
         dbg!(&statements);
     }
 
-    let entities = match Analyser::analyse_stmts(&mut statements) {
+    let _ = match Analyser::analyse_stmts(&mut statements) {
         Some(func_data) => func_data,
         None => return,
     };
