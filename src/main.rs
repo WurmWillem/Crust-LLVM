@@ -1,5 +1,4 @@
 use analysis::Analyser;
-use codegen::Codegen;
 use error::{PRINT_PARSE_TREE, PRINT_TOKENS};
 use scanner::Scanner;
 

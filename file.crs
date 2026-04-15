@@ -1,3 +1,4 @@
 fn main() {
-    pr 3 + 12; 
+    int x = 3;
+    pr x + x;
 }

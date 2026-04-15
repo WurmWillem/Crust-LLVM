@@ -1,10 +1,12 @@
+use inkwell::types::BasicType;
 use inkwell::OptimizationLevel;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
-use inkwell::values::BasicValueEnum;
+use inkwell::values::{BasicValueEnum, PointerValue};
 
+use std::collections::HashMap;
 use std::error::Error;
 
 use crate::expression::{Expr, ExprType};
@@ -26,6 +28,9 @@ pub struct CodeGen<'ctx> {
     module: Module<'ctx>,
     builder: Builder<'ctx>,
     execution_engine: ExecutionEngine<'ctx>,
+
+    alloc_builder: Builder<'ctx>,
+    declared_vars: HashMap<String, PointerValue<'ctx>>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -33,11 +38,13 @@ impl<'ctx> CodeGen<'ctx> {
         let context = Context::create();
         let module = context.create_module("program");
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
-        let codegen = CodeGen {
+        let mut codegen = CodeGen {
             context: &context,
             module,
             builder: context.create_builder(),
+            alloc_builder: context.create_builder(),
             execution_engine,
+            declared_vars: HashMap::new(),
         };
 
         codegen.build_main(stmts)?;
@@ -61,8 +68,8 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn build_main(
-        &self,
-        stmts: Vec<Stmt>,
+        &mut self,
+        mut stmts: Vec<Stmt>,
     ) -> Result<(), Box<dyn Error>> {
         // Declare external print_i64
         let i64_type = self.context.i64_type();
@@ -70,13 +77,17 @@ impl<'ctx> CodeGen<'ctx> {
         let print_type = void_type.fn_type(&[i64_type.into()], false);
         self.module.add_function("print_i64", print_type, None);
 
+
         // Create main function
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
+
         let basic_block = self.context.append_basic_block(function, "entry");
         self.builder.position_at_end(basic_block);
+        self.alloc_builder.position_at_end(basic_block);
 
-        for stmt in &stmts {
+
+        for stmt in &mut stmts {
             self.emit_stmt(stmt);
         }
 
@@ -85,35 +96,21 @@ impl<'ctx> CodeGen<'ctx> {
 
         Ok(())
     }
-    fn compile_main(&self, stmts: Vec<Stmt>) -> Option<JitFunction<'_, MainFunc>> {
-        // add print function
-        let i64_type = self.context.i64_type();
-        let void_type = self.context.void_type();
-        let print_type = void_type.fn_type(&[i64_type.into()], false);
-        self.module.add_function("print_i64", print_type, None);
 
-        let fn_type = self.context.i64_type().fn_type(&[], false);
-        let function = self.module.add_function("main", fn_type, None);
-
-        let basic_block = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(basic_block);
-
-        for stmt in &stmts {
-            self.emit_stmt(stmt);
-        }
-
-        self.builder
-            .build_return(Some(&self.context.i64_type().const_int(0, false)))
-            .unwrap();
-        unsafe { self.execution_engine.get_function("main").ok() }
-    }
-
-    fn emit_stmt(&self, stmt: &Stmt) {
+    fn emit_stmt(&mut self, stmt: &Stmt) {
         // dbg!(stmt);
         match &stmt.stmt {
             StmtType::Expr(expr) => {
                 let _ = self.emit_expr(expr);
                 // self.builder.build_return(Some(&e)).unwrap();
+            }
+            StmtType::VarDecl { name, value, ty } => {
+                let ty = self.context.i64_type();
+                let ptr = self.alloc_builder.build_alloca(ty, &name).unwrap();
+
+                let value = self.emit_expr(value);
+                self.alloc_builder.build_store(ptr, value).unwrap();
+                self.declared_vars.insert(name.to_string(), ptr);
             }
             StmtType::Println(expr) => {
                 let value = self.emit_expr(expr);
@@ -142,6 +139,10 @@ impl<'ctx> CodeGen<'ctx> {
         // dbg!(&expr.expr);
         use crate::token::Literal;
         match &expr.expr {
+            ExprType::Identifier(name) => {
+                let ptr = self.declared_vars.get(name).unwrap();
+                self.builder.build_load(self.context.i64_type(), *ptr, name).unwrap()
+            }
             ExprType::Lit(literal) => match literal {
                 Literal::I64(n) => self.context.i64_type().const_int(*n as u64, false).into(),
                 // Literal::U64(n) => self.context.u64_type().const_int(*n as u64, false).into(),
