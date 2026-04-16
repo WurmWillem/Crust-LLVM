@@ -1,9 +1,7 @@
 fn main() {
-    if false {
-        pr 50;
-    } else if false {
-        pr 30;
-    } else {
-        pr 10;
+    int x = 3;
+    while x < 10 {
+        pr x;
+        x = x + 1;
     }
 }

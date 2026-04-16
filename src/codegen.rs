@@ -105,8 +105,41 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) {
-        dbg!(stmt);
         match &stmt.stmt {
+            StmtType::While { condition, body } => {
+                let condition = self.emit_expr(condition).into_int_value();
+                let function = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+
+                let body_block = self.context.append_basic_block(function, "while_body");
+                let condition_block = self.context.append_basic_block(function, "while_condition");
+                let end_block = self.context.append_basic_block(function, "while_end");
+
+                self.builder.position_at_end(condition_block);
+                self.builder
+                    .build_conditional_branch(condition, body_block, end_block)
+                    .unwrap();
+
+                self.builder.position_at_end(body_block);
+                self.emit_stmt(&body);
+                if self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.builder
+                        .build_unconditional_branch(condition_block)
+                        .unwrap();
+                }
+
+                self.builder.position_at_end(end_block);
+            }
             StmtType::If {
                 condition,
                 body,
@@ -122,16 +155,14 @@ impl<'ctx> CodeGen<'ctx> {
 
                 let then_block = self.context.append_basic_block(function, "then");
                 let else_block = self.context.append_basic_block(function, "else");
-                let end_block = self.context.append_basic_block(function, "ifend");
+                let end_block = self.context.append_basic_block(function, "if_end");
 
                 self.builder
                     .build_conditional_branch(condition, then_block, else_block)
                     .unwrap();
 
                 self.builder.position_at_end(then_block);
-
                 self.emit_stmt(&body);
-
                 if self
                     .builder
                     .get_insert_block()
@@ -240,6 +271,7 @@ impl<'ctx> CodeGen<'ctx> {
                 use crate::parse_types::BinaryOp;
                 // use inkwell::IntPredicate::*;
                 // use inkwell::FloatPredicate::*;
+                dbg!(&end_ty);
 
                 let result: BasicValueEnum = match end_ty {
                     ValueType::Bool => {
