@@ -107,7 +107,6 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_stmt(&mut self, stmt: &Stmt) {
         match &stmt.stmt {
             StmtType::While { condition, body } => {
-                let condition = self.emit_expr(condition).into_int_value();
                 let function = self
                     .builder
                     .get_insert_block()
@@ -119,13 +118,22 @@ impl<'ctx> CodeGen<'ctx> {
                 let condition_block = self.context.append_basic_block(function, "while_condition");
                 let end_block = self.context.append_basic_block(function, "while_end");
 
+                self.builder
+                    .build_unconditional_branch(condition_block)
+                    .unwrap();
+
+                // condition block
                 self.builder.position_at_end(condition_block);
+                let condition = self.emit_expr(condition).into_int_value();
+
                 self.builder
                     .build_conditional_branch(condition, body_block, end_block)
                     .unwrap();
 
+                // body block
                 self.builder.position_at_end(body_block);
                 self.emit_stmt(&body);
+
                 if self
                     .builder
                     .get_insert_block()
@@ -138,6 +146,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .unwrap();
                 }
 
+                // end block
                 self.builder.position_at_end(end_block);
             }
             StmtType::If {
@@ -243,7 +252,7 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
         use crate::token::Literal;
-        let end_ty = expr.end_ty.clone();
+        // let end_ty = expr.end_ty.clone();
         match &expr.expr {
             ExprType::Identifier(name) => {
                 let ptr = self.declared_vars.get(name).unwrap();
@@ -271,9 +280,8 @@ impl<'ctx> CodeGen<'ctx> {
                 use crate::parse_types::BinaryOp;
                 // use inkwell::IntPredicate::*;
                 // use inkwell::FloatPredicate::*;
-                dbg!(&end_ty);
 
-                let result: BasicValueEnum = match end_ty {
+                let result: BasicValueEnum = match left.end_ty {
                     ValueType::Bool => {
                         let left = self.emit_expr(left).into_int_value();
                         let right = self.emit_expr(right).into_int_value();
