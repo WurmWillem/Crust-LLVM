@@ -1,5 +1,5 @@
 use crate::{
-    error::{print_error, ParseErr},
+    error::{ParseErr, print_error},
     expression::{Expr, ExprType},
     parse_types::{BinaryOp, FnType, Precedence},
     statement::{Stmt, StmtType},
@@ -316,12 +316,12 @@ impl Parser {
         let op = BinaryOp::from_token_type(self.previous().ty);
 
         let precedence = op.get_precedency().to_next_precedency();
-        // dbg!(precedence);
+
         let right = Box::new(self.parse_precedence(precedence)?);
 
         let line = self.previous().line;
         let kind = ExprType::Binary { left, op, right };
-        // dbg!(&kind);
+
         let expr = Expr::new(kind, line);
         Ok(expr)
     }
@@ -414,7 +414,11 @@ impl Parser {
         // declare var
         let value = self.expression()?;
         let ty = ValueType::I64;
-        let kind = StmtType::VarDecl { name: name.clone(), value, ty };
+        let kind = StmtType::VarDecl {
+            name: name.clone(),
+            value,
+            ty,
+        };
         let var = Box::new(Stmt::new(kind, line));
 
         // condition

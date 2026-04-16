@@ -1,3 +1,9 @@
 fn main() {
-    pr 3.2;
+    if false {
+        pr 50;
+    } else if false {
+        pr 30;
+    } else {
+        pr 10;
+    }
 }

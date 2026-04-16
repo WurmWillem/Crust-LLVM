@@ -6,6 +6,7 @@ use colored::Colorize;
 
 mod analysis;
 mod analysis_types;
+mod codegen;
 mod error;
 mod expression;
 mod parse_types;
@@ -14,7 +15,6 @@ mod scanner;
 mod statement;
 mod token;
 mod value;
-mod codegen;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

@@ -12,7 +12,11 @@ pub struct Expr {
 }
 impl Expr {
     pub fn new(expr: ExprType, line: u32) -> Expr {
-        Expr { expr, line, end_ty: ValueType::Any }
+        Expr {
+            expr,
+            line,
+            end_ty: ValueType::Any,
+        }
     }
     pub fn get_line(&self) -> u32 {
         self.line

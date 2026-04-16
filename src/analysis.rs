@@ -73,7 +73,12 @@ impl Analyser {
                     use_self: *use_self,
                 };
 
-                if self.entities.funcs.insert(name.to_string(), func_data).is_some() {
+                if self
+                    .entities
+                    .funcs
+                    .insert(name.to_string(), func_data)
+                    .is_some()
+                {
                     let err_ty = SemErrType::AlreadyDefinedFunc(name.to_string());
                     return Err(SemErr::new(line, err_ty));
                 }
@@ -92,7 +97,12 @@ impl Analyser {
                 let struct_data = StructData::new(fields.clone());
                 let mut method_data = vec![];
 
-                if self.entities.structs.insert(name.to_string(), struct_data).is_some() {
+                if self
+                    .entities
+                    .structs
+                    .insert(name.to_string(), struct_data)
+                    .is_some()
+                {
                     let err_ty = SemErrType::AlreadyDefinedStruct(name.to_string());
                     return Err(SemErr::new(line, err_ty));
                 }
@@ -172,7 +182,8 @@ impl Analyser {
                     return Err(SemErr::new(line, err_ty));
                 }
 
-                self.symbols.declare(Symbol::new(name.to_string(), ty.clone()), line)?;
+                self.symbols
+                    .declare(Symbol::new(name.to_string(), ty.clone()), line)?;
             }
             StmtType::Println(expr) => {
                 self.analyse_expr(expr)?;
@@ -394,7 +405,8 @@ impl Analyser {
 
         for (ty, name) in parameters {
             self.entities.resolve_value_ty(ty);
-            self.symbols.declare(Symbol::new(name.to_string(), ty.clone()), line)?;
+            self.symbols
+                .declare(Symbol::new(name.to_string(), ty.clone()), line)?;
         }
         self.return_stmt_found = false;
 
@@ -504,8 +516,7 @@ impl Analyser {
         }
         // dbg!(&inst);
         if let ExprType::Identifier(ref name) = inst.expr {
-            if self.entities.structs.contains_key(name)
-            {
+            if self.entities.structs.contains_key(name) {
                 return Ok(name.to_string());
             }
         }
@@ -548,11 +559,7 @@ impl Analyser {
         })
     }
 
-    fn analyse_array_expr(
-        &mut self,
-        values: &mut [Expr],
-        line: u32,
-    ) -> Result<ValueType, SemErr> {
+    fn analyse_array_expr(&mut self, values: &mut [Expr], line: u32) -> Result<ValueType, SemErr> {
         if values.is_empty() {
             return Ok(ValueType::Arr(Box::new(ValueType::Any)));
         }

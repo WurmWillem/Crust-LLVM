@@ -45,12 +45,7 @@ pub struct Token {
     pub line: u32,
 }
 impl Token {
-    pub fn new(
-        kind: TokenType,
-        lexeme: String,
-        literal: Literal,
-        line: u32,
-    ) -> Self {
+    pub fn new(kind: TokenType, lexeme: String, literal: Literal, line: u32) -> Self {
         Self {
             ty: kind,
             lexeme,

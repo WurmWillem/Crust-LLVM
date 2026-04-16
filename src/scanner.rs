@@ -51,8 +51,12 @@ impl Scanner {
             self.scan_token();
         }
 
-        self.tokens
-            .push(Token::new(TokenType::Eof, "".to_string(), Literal::None, self.line));
+        self.tokens.push(Token::new(
+            TokenType::Eof,
+            "".to_string(),
+            Literal::None,
+            self.line,
+        ));
 
         if self.had_error {
             Err(())

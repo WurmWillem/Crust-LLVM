@@ -105,8 +105,66 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) {
-        // dbg!(stmt);
+        dbg!(stmt);
         match &stmt.stmt {
+            StmtType::If {
+                condition,
+                body,
+                final_else,
+            } => {
+                let condition = self.emit_expr(condition).into_int_value();
+                let function = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+
+                let then_block = self.context.append_basic_block(function, "then");
+                let else_block = self.context.append_basic_block(function, "else");
+                let end_block = self.context.append_basic_block(function, "ifend");
+
+                self.builder
+                    .build_conditional_branch(condition, then_block, else_block)
+                    .unwrap();
+
+                self.builder.position_at_end(then_block);
+
+                self.emit_stmt(&body);
+
+                if self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.builder.build_unconditional_branch(end_block).unwrap();
+                }
+
+                self.builder.position_at_end(else_block);
+
+                if let Some(else_stmt) = final_else {
+                    self.emit_stmt(else_stmt);
+                }
+
+                if self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.builder.build_unconditional_branch(end_block).unwrap();
+                }
+
+                self.builder.position_at_end(end_block);
+            }
+            StmtType::Block(stmts) => {
+                for stmt in stmts {
+                    self.emit_stmt(stmt);
+                }
+            }
             StmtType::Expr(expr) => {
                 let _ = self.emit_expr(expr);
                 // self.builder.build_return(Some(&e)).unwrap();
@@ -128,7 +186,7 @@ impl<'ctx> CodeGen<'ctx> {
                     ValueType::I64 => self.module.get_function("print_i64").unwrap(),
                     ValueType::U64 => todo!(),
                     ValueType::Str => todo!(),
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 };
                 self.module.get_function("print_i64").unwrap();
 
