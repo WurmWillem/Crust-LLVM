@@ -3,6 +3,7 @@ use crate::{expression::Expr, value::ValueType};
 #[derive(Debug, Clone)]
 pub struct Stmt {
     pub stmt: StmtType,
+    // TODO: make this private add getter
     pub line: u32,
 }
 impl Stmt {

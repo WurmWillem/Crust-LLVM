@@ -105,6 +105,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) {
+        dbg!(stmt);
         match &stmt.stmt {
             StmtType::While { condition, body } => {
                 let function = self
@@ -133,6 +134,70 @@ impl<'ctx> CodeGen<'ctx> {
                 // body block
                 self.builder.position_at_end(body_block);
                 self.emit_stmt(&body);
+
+                if self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_terminator()
+                    .is_none()
+                {
+                    self.builder
+                        .build_unconditional_branch(condition_block)
+                        .unwrap();
+                }
+
+                // end block
+                self.builder.position_at_end(end_block);
+            }
+            StmtType::For {
+                var,
+                condition,
+                body,
+            } => {
+                let function = self
+                    .builder
+                    .get_insert_block()
+                    .unwrap()
+                    .get_parent()
+                    .unwrap();
+
+                self.emit_stmt(var);
+
+                let condition_block = self.context.append_basic_block(function, "for_condition");
+                let body_block = self.context.append_basic_block(function, "for_body");
+                let end_block = self.context.append_basic_block(function, "for_end");
+
+                self.builder
+                    .build_unconditional_branch(condition_block)
+                    .unwrap();
+
+                // condition block
+                self.builder.position_at_end(condition_block);
+                let condition = self.emit_expr(condition).into_int_value();
+                self.builder
+                    .build_conditional_branch(condition, body_block, end_block)
+                    .unwrap();
+
+                // body block
+                self.builder.position_at_end(body_block);
+                self.emit_stmt(&body);
+
+                let name = if let StmtType::VarDecl { name, .. } = &var.stmt {
+                    name
+                } else {
+                    unreachable!();
+                };
+                let i_ptr = self.declared_vars.get(name).unwrap();
+                let x = self
+                    .builder
+                    .build_load(self.context.i64_type(), *i_ptr, "load_i")
+                    .unwrap().into_int_value();
+                let one = self.context.i64_type().const_int(1, false);
+                let new_i = self.builder.build_int_add(x,  one, "add_i_tmp").unwrap();
+                self.builder.build_store(*i_ptr, new_i).unwrap();
+
+                // let stmt = Sm
 
                 if self
                     .builder
@@ -254,6 +319,10 @@ impl<'ctx> CodeGen<'ctx> {
         use crate::token::Literal;
         // let end_ty = expr.end_ty.clone();
         match &expr.expr {
+            ExprType::Cast { value, target: _ } => {
+                // TODO: make this actually cast
+                self.emit_expr(value)
+            }
             ExprType::Identifier(name) => {
                 let ptr = self.declared_vars.get(name).unwrap();
                 self.builder
