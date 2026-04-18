@@ -19,6 +19,10 @@ use crate::value::ValueType;
 type MainFunc = unsafe extern "C" fn() -> i64;
 
 #[unsafe(no_mangle)]
+pub extern "C" fn print_u64(x: u64) {
+    println!("{}", x);
+}
+#[unsafe(no_mangle)]
 pub extern "C" fn print_i64(x: i64) {
     println!("{}", x);
 }
@@ -41,7 +45,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn compile(stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
-        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
+        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
         let mut codegen = CodeGen {
             context: &context,
             module,
@@ -58,6 +62,11 @@ impl<'ctx> CodeGen<'ctx> {
             .execution_engine
             .add_global_mapping(&print_i64_fn, print_i64 as usize);
 
+        let print_u64_fn = codegen.module.get_function("print_u64").unwrap();
+        codegen
+            .execution_engine
+            .add_global_mapping(&print_u64_fn, print_u64 as usize);
+
         let print_f64_fn = codegen.module.get_function("print_f64").unwrap();
         codegen
             .execution_engine
@@ -69,9 +78,14 @@ impl<'ctx> CodeGen<'ctx> {
 
         // codegen.module.print_to_stderr();
 
+        let start = std::time::Instant::now();
         unsafe {
-            println!("main returns '{}'", main.call());
+            main.call();
         }
+        println!("{:?}", start.elapsed());
+        // unsafe {
+        //     println!("main returns '{}'", main.call());
+        // }
 
         Ok(())
     }
@@ -81,8 +95,10 @@ impl<'ctx> CodeGen<'ctx> {
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
 
-        let print_type = void_type.fn_type(&[i64_type.into()], false);
-        self.module.add_function("print_i64", print_type, None);
+        let print_i64_type = void_type.fn_type(&[i64_type.into()], false);
+        self.module.add_function("print_i64", print_i64_type, None);
+        let print_u64_type = void_type.fn_type(&[self.context.i64_type().into()], false);
+        self.module.add_function("print_u64", print_u64_type, None);
         let print_f64_type = void_type.fn_type(&[self.context.f64_type().into()], false);
         self.module.add_function("print_f64", print_f64_type, None);
 
@@ -192,9 +208,10 @@ impl<'ctx> CodeGen<'ctx> {
                 let x = self
                     .builder
                     .build_load(self.context.i64_type(), *i_ptr, "load_i")
-                    .unwrap().into_int_value();
+                    .unwrap()
+                    .into_int_value();
                 let one = self.context.i64_type().const_int(1, false);
-                let new_i = self.builder.build_int_add(x,  one, "add_i_tmp").unwrap();
+                let new_i = self.builder.build_int_add(x, one, "add_i_tmp").unwrap();
                 self.builder.build_store(*i_ptr, new_i).unwrap();
 
                 // let stmt = Sm
@@ -289,7 +306,7 @@ impl<'ctx> CodeGen<'ctx> {
                     ValueType::Bool => self.module.get_function("print_i64").unwrap(),
                     ValueType::F64 => self.module.get_function("print_f64").unwrap(),
                     ValueType::I64 => self.module.get_function("print_i64").unwrap(),
-                    ValueType::U64 => todo!(),
+                    ValueType::U64 => self.module.get_function("print_u64").unwrap(),
                     ValueType::Str => todo!(),
                     _ => unreachable!(),
                 };
@@ -338,8 +355,8 @@ impl<'ctx> CodeGen<'ctx> {
                 val.into()
             }
             ExprType::Lit(literal) => match literal {
-                Literal::I64(n) => self.context.i64_type().const_int(*n as u64, false).into(),
-                // Literal::U64(n) => self.context.u64_type().const_int(*n as u64, false).into(),
+                Literal::I64(n) => self.context.i64_type().const_int(*n as u64, true).into(),
+                Literal::U64(n) => self.context.i64_type().const_int(*n, false).into(),
                 Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
                 Literal::True => self.context.bool_type().const_int(1, false).into(),
                 Literal::False => self.context.bool_type().const_int(0, false).into(),
@@ -496,7 +513,65 @@ impl<'ctx> CodeGen<'ctx> {
                             _ => unreachable!(),
                         }
                     }
-                    crate::value::ValueType::U64 => todo!(),
+                    ValueType::U64 => {
+                        let left = self.emit_expr(left).into_int_value();
+                        let right = self.emit_expr(right).into_int_value();
+                        use inkwell::IntPredicate::*;
+
+                        match op {
+                            BinaryOp::Add => self
+                                .builder
+                                .build_int_add(left, right, "addtmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Sub => self
+                                .builder
+                                .build_int_sub(left, right, "subtmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Mul => self
+                                .builder
+                                .build_int_mul(left, right, "multmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Div => self
+                                .builder
+                                .build_int_unsigned_div(left, right, "divtmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Equal => self
+                                .builder
+                                .build_int_compare(EQ, left, right, "eqtmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::NotEqual => self
+                                .builder
+                                .build_int_compare(NE, left, right, "neqtmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Less => self
+                                .builder
+                                .build_int_compare(ULT, left, right, "ulttmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::LessEqual => self
+                                .builder
+                                .build_int_compare(ULE, left, right, "uletmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::Greater => self
+                                .builder
+                                .build_int_compare(UGT, left, right, "ugttmp")
+                                .unwrap()
+                                .into(),
+                            BinaryOp::GreaterEqual => self
+                                .builder
+                                .build_int_compare(UGE, left, right, "ugetmp")
+                                .unwrap()
+                                .into(),
+                            _ => unreachable!(),
+                        }
+                    }
                     _ => unreachable!(),
                 };
                 result
