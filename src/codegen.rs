@@ -67,7 +67,7 @@ impl<'ctx> CodeGen<'ctx> {
             unsafe { codegen.execution_engine.get_function("main").ok() }
                 .ok_or("Unable to get JIT function")?;
 
-        codegen.module.print_to_stderr();
+        // codegen.module.print_to_stderr();
 
         unsafe {
             println!("main returns '{}'", main.call());
@@ -105,7 +105,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_stmt(&mut self, stmt: &Stmt) {
-        dbg!(stmt);
+        // dbg!(stmt);
         match &stmt.stmt {
             StmtType::While { condition, body } => {
                 let function = self
