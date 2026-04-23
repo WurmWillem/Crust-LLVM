@@ -139,163 +139,21 @@ impl<'ctx> CodeGen<'ctx> {
         // dbg!(stmt);
         match &stmt.stmt {
             StmtType::While { condition, body } => {
-                let function = self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_parent()
-                    .unwrap();
-
-                let body_block = self.context.append_basic_block(function, "while_body");
-                let condition_block = self.context.append_basic_block(function, "while_condition");
-                let end_block = self.context.append_basic_block(function, "while_end");
-
-                self.builder
-                    .build_unconditional_branch(condition_block)
-                    .unwrap();
-
-                // condition block
-                self.builder.position_at_end(condition_block);
-                let condition = self.emit_expr(condition).into_int_value();
-
-                self.builder
-                    .build_conditional_branch(condition, body_block, end_block)
-                    .unwrap();
-
-                // body block
-                self.builder.position_at_end(body_block);
-                self.emit_stmt(&body);
-
-                if self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_terminator()
-                    .is_none()
-                {
-                    self.builder
-                        .build_unconditional_branch(condition_block)
-                        .unwrap();
-                }
-
-                // end block
-                self.builder.position_at_end(end_block);
+                self.emit_while_stmt(condition, body);
             }
             StmtType::For {
                 var,
                 condition,
                 body,
             } => {
-                let function = self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_parent()
-                    .unwrap();
-
-                self.emit_stmt(var);
-
-                let condition_block = self.context.append_basic_block(function, "for_condition");
-                let body_block = self.context.append_basic_block(function, "for_body");
-                let end_block = self.context.append_basic_block(function, "for_end");
-
-                self.builder
-                    .build_unconditional_branch(condition_block)
-                    .unwrap();
-
-                // condition block
-                self.builder.position_at_end(condition_block);
-                let condition = self.emit_expr(condition).into_int_value();
-                self.builder
-                    .build_conditional_branch(condition, body_block, end_block)
-                    .unwrap();
-
-                // body block
-                self.builder.position_at_end(body_block);
-                self.emit_stmt(&body);
-
-                let name = if let StmtType::VarDecl { name, .. } = &var.stmt {
-                    name
-                } else {
-                    unreachable!();
-                };
-                let (i_ptr, _) = self.declared_vars.get(name).unwrap();
-                let x = self
-                    .builder
-                    .build_load(self.context.i64_type(), *i_ptr, "load_i")
-                    .unwrap()
-                    .into_int_value();
-                let one = self.context.i64_type().const_int(1, false);
-                let new_i = self.builder.build_int_add(x, one, "add_i_tmp").unwrap();
-                self.builder.build_store(*i_ptr, new_i).unwrap();
-
-                // let stmt = Sm
-
-                if self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_terminator()
-                    .is_none()
-                {
-                    self.builder
-                        .build_unconditional_branch(condition_block)
-                        .unwrap();
-                }
-
-                // end block
-                self.builder.position_at_end(end_block);
+                self.emit_for_stmt(var, condition, body);
             }
             StmtType::If {
                 condition,
                 body,
                 final_else,
             } => {
-                let condition = self.emit_expr(condition).into_int_value();
-                let function = self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_parent()
-                    .unwrap();
-
-                let then_block = self.context.append_basic_block(function, "then");
-                let else_block = self.context.append_basic_block(function, "else");
-                let end_block = self.context.append_basic_block(function, "if_end");
-
-                self.builder
-                    .build_conditional_branch(condition, then_block, else_block)
-                    .unwrap();
-
-                self.builder.position_at_end(then_block);
-                self.emit_stmt(&body);
-                if self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_terminator()
-                    .is_none()
-                {
-                    self.builder.build_unconditional_branch(end_block).unwrap();
-                }
-
-                self.builder.position_at_end(else_block);
-
-                if let Some(else_stmt) = final_else {
-                    self.emit_stmt(else_stmt);
-                }
-
-                if self
-                    .builder
-                    .get_insert_block()
-                    .unwrap()
-                    .get_terminator()
-                    .is_none()
-                {
-                    self.builder.build_unconditional_branch(end_block).unwrap();
-                }
-
-                self.builder.position_at_end(end_block);
+                self.emit_if_stmt(condition, body, final_else);
             }
             StmtType::Block(stmts) => {
                 for stmt in stmts {
@@ -347,23 +205,6 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn llvm_type(&self, ty: &ValueType) -> BasicTypeEnum<'ctx> {
-        match ty {
-            ValueType::I64 => self.context.i64_type().into(),
-            ValueType::U64 => self.context.i64_type().into(),
-            ValueType::Bool => self.context.bool_type().into(),
-            ValueType::F64 => self.context.f64_type().into(),
-            ValueType::Str => self.string_type().into(),
-            _ => todo!(),
-        }
-    }
-
-    fn string_type(&self) -> StructType<'ctx> {
-        let i8_ptr = self.context.ptr_type(AddressSpace::default());
-        self.context
-            .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false)
-    }
-
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
         use crate::token::Literal;
@@ -393,239 +234,416 @@ impl<'ctx> CodeGen<'ctx> {
                 Literal::False => self.context.bool_type().const_int(0, false).into(),
                 Literal::Str(string) => {
                     // self.emit_string_literal(text).into()
-                    let global = self
-                        .builder
-                        .build_global_string_ptr(&string, "string_lit")
-                        .unwrap();
-
-                    let len = self
-                        .context
-                        .i64_type()
-                        .const_int(string.len() as u64, false);
-
-                    let str_ty = self.string_type();
-
-                    str_ty
-                        .const_named_struct(&[global.as_pointer_value().into(), len.into()])
-                        .into()
+                    self.emit_str_expr(string)
                 }
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => {
-                use crate::parse_types::BinaryOp;
-                // use inkwell::IntPredicate::*;
-                // use inkwell::FloatPredicate::*;
-
-                let result: BasicValueEnum = match left.end_ty {
-                    ValueType::Bool => {
-                        let left = self.emit_expr(left).into_int_value();
-                        let right = self.emit_expr(right).into_int_value();
-                        use inkwell::IntPredicate::*;
-
-                        match op {
-                            BinaryOp::Equal => self
-                                .builder
-                                .build_int_compare(EQ, left, right, "eqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::NotEqual => self
-                                .builder
-                                .build_int_compare(NE, left, right, "neqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::And => self
-                                .builder
-                                .build_and(left, right, "andtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Or => {
-                                self.builder.build_or(left, right, "ortmp").unwrap().into()
-                            }
-                            _ => unreachable!(),
-                        }
-                    }
-                    ValueType::I64 => {
-                        let left = self.emit_expr(left).into_int_value();
-                        let right = self.emit_expr(right).into_int_value();
-                        use inkwell::IntPredicate::*;
-
-                        match op {
-                            BinaryOp::Add => self
-                                .builder
-                                .build_int_add(left, right, "addtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Sub => self
-                                .builder
-                                .build_int_sub(left, right, "subtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Mul => self
-                                .builder
-                                .build_int_mul(left, right, "multmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Div => self
-                                .builder
-                                .build_int_signed_div(left, right, "divtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Equal => self
-                                .builder
-                                .build_int_compare(EQ, left, right, "eqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::NotEqual => self
-                                .builder
-                                .build_int_compare(NE, left, right, "neqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Less => self
-                                .builder
-                                .build_int_compare(SLT, left, right, "slttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::LessEqual => self
-                                .builder
-                                .build_int_compare(SLE, left, right, "sletmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Greater => self
-                                .builder
-                                .build_int_compare(SGT, left, right, "sgttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::GreaterEqual => self
-                                .builder
-                                .build_int_compare(SGE, left, right, "sgetmp")
-                                .unwrap()
-                                .into(),
-                            _ => unreachable!(),
-                        }
-                    }
-                    ValueType::F64 => {
-                        let left = self.emit_expr(left).into_float_value();
-                        let right = self.emit_expr(right).into_float_value();
-                        use inkwell::FloatPredicate::*;
-
-                        match op {
-                            BinaryOp::Add => self
-                                .builder
-                                .build_float_add(left, right, "addtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Sub => self
-                                .builder
-                                .build_float_sub(left, right, "subtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Mul => self
-                                .builder
-                                .build_float_mul(left, right, "multmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Div => self
-                                .builder
-                                .build_float_div(left, right, "divtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Equal => self
-                                .builder
-                                .build_float_compare(OEQ, left, right, "eqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::NotEqual => self
-                                .builder
-                                .build_float_compare(ONE, left, right, "neqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Less => self
-                                .builder
-                                .build_float_compare(OLT, left, right, "slttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::LessEqual => self
-                                .builder
-                                .build_float_compare(OLE, left, right, "sletmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Greater => self
-                                .builder
-                                .build_float_compare(OGT, left, right, "sgttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::GreaterEqual => self
-                                .builder
-                                .build_float_compare(OGE, left, right, "sgetmp")
-                                .unwrap()
-                                .into(),
-                            _ => unreachable!(),
-                        }
-                    }
-                    ValueType::U64 => {
-                        let left = self.emit_expr(left).into_int_value();
-                        let right = self.emit_expr(right).into_int_value();
-                        use inkwell::IntPredicate::*;
-
-                        match op {
-                            BinaryOp::Add => self
-                                .builder
-                                .build_int_add(left, right, "addtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Sub => self
-                                .builder
-                                .build_int_sub(left, right, "subtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Mul => self
-                                .builder
-                                .build_int_mul(left, right, "multmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Div => self
-                                .builder
-                                .build_int_unsigned_div(left, right, "divtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Equal => self
-                                .builder
-                                .build_int_compare(EQ, left, right, "eqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::NotEqual => self
-                                .builder
-                                .build_int_compare(NE, left, right, "neqtmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Less => self
-                                .builder
-                                .build_int_compare(ULT, left, right, "ulttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::LessEqual => self
-                                .builder
-                                .build_int_compare(ULE, left, right, "uletmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::Greater => self
-                                .builder
-                                .build_int_compare(UGT, left, right, "ugttmp")
-                                .unwrap()
-                                .into(),
-                            BinaryOp::GreaterEqual => self
-                                .builder
-                                .build_int_compare(UGE, left, right, "ugetmp")
-                                .unwrap()
-                                .into(),
-                            _ => unreachable!(),
-                        }
-                    }
-                    _ => unreachable!(),
-                };
-                result
+                self.emit_binary_expr(left, op, right)
             }
             _ => todo!(),
         }
+    }
+
+    fn string_type(&self) -> StructType<'ctx> {
+        let i8_ptr = self.context.ptr_type(AddressSpace::default());
+        self.context
+            .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false)
+    }
+
+    fn llvm_type(&self, ty: &ValueType) -> BasicTypeEnum<'ctx> {
+        match ty {
+            ValueType::I64 => self.context.i64_type().into(),
+            ValueType::U64 => self.context.i64_type().into(),
+            ValueType::Bool => self.context.bool_type().into(),
+            ValueType::F64 => self.context.f64_type().into(),
+            ValueType::Str => self.string_type().into(),
+            _ => todo!(),
+        }
+    }
+
+    fn emit_str_expr(&self, string: &String) -> BasicValueEnum<'_> {
+        let global = self
+            .builder
+            .build_global_string_ptr(&string, "string_lit")
+            .unwrap();
+
+        let len = self
+            .context
+            .i64_type()
+            .const_int(string.len() as u64, false);
+
+        let str_ty = self.string_type();
+
+        str_ty
+            .const_named_struct(&[global.as_pointer_value().into(), len.into()])
+            .into()
+    }
+
+    fn emit_if_stmt(&mut self, condition: &Expr, body: &Box<Stmt>, final_else: &Option<Box<Stmt>>) {
+        let condition = self.emit_expr(condition).into_int_value();
+        let function = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let then_block = self.context.append_basic_block(function, "then");
+        let else_block = self.context.append_basic_block(function, "else");
+        let end_block = self.context.append_basic_block(function, "if_end");
+
+        self.builder
+            .build_conditional_branch(condition, then_block, else_block)
+            .unwrap();
+
+        self.builder.position_at_end(then_block);
+        self.emit_stmt(&body);
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder.build_unconditional_branch(end_block).unwrap();
+        }
+
+        self.builder.position_at_end(else_block);
+
+        if let Some(else_stmt) = final_else {
+            self.emit_stmt(else_stmt);
+        }
+
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder.build_unconditional_branch(end_block).unwrap();
+        }
+
+        self.builder.position_at_end(end_block);
+    }
+
+    fn emit_for_stmt(&mut self, var: &Box<Stmt>, condition: &Expr, body: &Box<Stmt>) {
+        let function = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        self.emit_stmt(var);
+
+        let condition_block = self.context.append_basic_block(function, "for_condition");
+        let body_block = self.context.append_basic_block(function, "for_body");
+        let end_block = self.context.append_basic_block(function, "for_end");
+
+        self.builder
+            .build_unconditional_branch(condition_block)
+            .unwrap();
+
+        // condition block
+        self.builder.position_at_end(condition_block);
+        let condition = self.emit_expr(condition).into_int_value();
+        self.builder
+            .build_conditional_branch(condition, body_block, end_block)
+            .unwrap();
+
+        // body block
+        self.builder.position_at_end(body_block);
+        self.emit_stmt(&body);
+
+        let name = if let StmtType::VarDecl { name, .. } = &var.stmt {
+            name
+        } else {
+            unreachable!();
+        };
+        let (i_ptr, _) = self.declared_vars.get(name).unwrap();
+        let x = self
+            .builder
+            .build_load(self.context.i64_type(), *i_ptr, "load_i")
+            .unwrap()
+            .into_int_value();
+        let one = self.context.i64_type().const_int(1, false);
+        let new_i = self.builder.build_int_add(x, one, "add_i_tmp").unwrap();
+        self.builder.build_store(*i_ptr, new_i).unwrap();
+
+        // let stmt = Sm
+
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(condition_block)
+                .unwrap();
+        }
+
+        // end block
+        self.builder.position_at_end(end_block);
+    }
+
+    fn emit_while_stmt(&mut self, condition: &Expr, body: &Box<Stmt>) {
+        let function = self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_parent()
+            .unwrap();
+
+        let body_block = self.context.append_basic_block(function, "while_body");
+        let condition_block = self.context.append_basic_block(function, "while_condition");
+        let end_block = self.context.append_basic_block(function, "while_end");
+
+        self.builder
+            .build_unconditional_branch(condition_block)
+            .unwrap();
+
+        // condition block
+        self.builder.position_at_end(condition_block);
+        let condition = self.emit_expr(condition).into_int_value();
+
+        self.builder
+            .build_conditional_branch(condition, body_block, end_block)
+            .unwrap();
+
+        // body block
+        self.builder.position_at_end(body_block);
+        self.emit_stmt(&body);
+
+        if self
+            .builder
+            .get_insert_block()
+            .unwrap()
+            .get_terminator()
+            .is_none()
+        {
+            self.builder
+                .build_unconditional_branch(condition_block)
+                .unwrap();
+        }
+
+        // end block
+        self.builder.position_at_end(end_block);
+    }
+
+    fn emit_binary_expr(&self, left: &Box<Expr>, op: &crate::parse_types::BinaryOp, right: &Box<Expr>) -> BasicValueEnum<'_> {
+        use crate::parse_types::BinaryOp;
+
+        let result: BasicValueEnum = match left.end_ty {
+            ValueType::Bool => {
+                let left = self.emit_expr(left).into_int_value();
+                let right = self.emit_expr(right).into_int_value();
+                use inkwell::IntPredicate::*;
+
+                match op {
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_int_compare(EQ, left, right, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_int_compare(NE, left, right, "neqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::And => self
+                        .builder
+                        .build_and(left, right, "andtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Or => {
+                        self.builder.build_or(left, right, "ortmp").unwrap().into()
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            ValueType::I64 => {
+                let left = self.emit_expr(left).into_int_value();
+                let right = self.emit_expr(right).into_int_value();
+                use inkwell::IntPredicate::*;
+
+                match op {
+                    BinaryOp::Add => self
+                        .builder
+                        .build_int_add(left, right, "addtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Sub => self
+                        .builder
+                        .build_int_sub(left, right, "subtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Mul => self
+                        .builder
+                        .build_int_mul(left, right, "multmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Div => self
+                        .builder
+                        .build_int_signed_div(left, right, "divtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_int_compare(EQ, left, right, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_int_compare(NE, left, right, "neqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Less => self
+                        .builder
+                        .build_int_compare(SLT, left, right, "slttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::LessEqual => self
+                        .builder
+                        .build_int_compare(SLE, left, right, "sletmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Greater => self
+                        .builder
+                        .build_int_compare(SGT, left, right, "sgttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::GreaterEqual => self
+                        .builder
+                        .build_int_compare(SGE, left, right, "sgetmp")
+                        .unwrap()
+                        .into(),
+                    _ => unreachable!(),
+                }
+            }
+            ValueType::F64 => {
+                let left = self.emit_expr(left).into_float_value();
+                let right = self.emit_expr(right).into_float_value();
+                use inkwell::FloatPredicate::*;
+
+                match op {
+                    BinaryOp::Add => self
+                        .builder
+                        .build_float_add(left, right, "addtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Sub => self
+                        .builder
+                        .build_float_sub(left, right, "subtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Mul => self
+                        .builder
+                        .build_float_mul(left, right, "multmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Div => self
+                        .builder
+                        .build_float_div(left, right, "divtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_float_compare(OEQ, left, right, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_float_compare(ONE, left, right, "neqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Less => self
+                        .builder
+                        .build_float_compare(OLT, left, right, "slttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::LessEqual => self
+                        .builder
+                        .build_float_compare(OLE, left, right, "sletmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Greater => self
+                        .builder
+                        .build_float_compare(OGT, left, right, "sgttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::GreaterEqual => self
+                        .builder
+                        .build_float_compare(OGE, left, right, "sgetmp")
+                        .unwrap()
+                        .into(),
+                    _ => unreachable!(),
+                }
+            }
+            ValueType::U64 => {
+                let left = self.emit_expr(left).into_int_value();
+                let right = self.emit_expr(right).into_int_value();
+                use inkwell::IntPredicate::*;
+
+                match op {
+                    BinaryOp::Add => self
+                        .builder
+                        .build_int_add(left, right, "addtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Sub => self
+                        .builder
+                        .build_int_sub(left, right, "subtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Mul => self
+                        .builder
+                        .build_int_mul(left, right, "multmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Div => self
+                        .builder
+                        .build_int_unsigned_div(left, right, "divtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Equal => self
+                        .builder
+                        .build_int_compare(EQ, left, right, "eqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::NotEqual => self
+                        .builder
+                        .build_int_compare(NE, left, right, "neqtmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Less => self
+                        .builder
+                        .build_int_compare(ULT, left, right, "ulttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::LessEqual => self
+                        .builder
+                        .build_int_compare(ULE, left, right, "uletmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::Greater => self
+                        .builder
+                        .build_int_compare(UGT, left, right, "ugttmp")
+                        .unwrap()
+                        .into(),
+                    BinaryOp::GreaterEqual => self
+                        .builder
+                        .build_int_compare(UGE, left, right, "ugetmp")
+                        .unwrap()
+                        .into(),
+                    _ => unreachable!(),
+                }
+            }
+            _ => unreachable!(),
+        };
+        result
     }
 }
