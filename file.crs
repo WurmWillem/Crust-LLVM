@@ -1,3 +1,5 @@
 fn main() {
-    pr "sdfsd";
+    // str x = "Hello World!";
+    str x = "Hello World!";
+    pr x;
 }

@@ -2,6 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
+use inkwell::types::{BasicTypeEnum, StructType};
 use inkwell::values::{BasicValueEnum, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 
@@ -45,7 +46,7 @@ pub struct CodeGen<'ctx> {
     execution_engine: ExecutionEngine<'ctx>,
 
     alloc_builder: Builder<'ctx>,
-    declared_vars: HashMap<String, PointerValue<'ctx>>,
+    declared_vars: HashMap<String, (PointerValue<'ctx>, ValueType)>,
 }
 
 impl<'ctx> CodeGen<'ctx> {
@@ -220,7 +221,7 @@ impl<'ctx> CodeGen<'ctx> {
                 } else {
                     unreachable!();
                 };
-                let i_ptr = self.declared_vars.get(name).unwrap();
+                let (i_ptr, _) = self.declared_vars.get(name).unwrap();
                 let x = self
                     .builder
                     .build_load(self.context.i64_type(), *i_ptr, "load_i")
@@ -307,13 +308,14 @@ impl<'ctx> CodeGen<'ctx> {
                 let _ = self.emit_expr(expr);
                 // self.builder.build_return(Some(&e)).unwrap();
             }
-            StmtType::VarDecl { name, value, ty: _ } => {
-                let ty = self.context.i64_type();
-                let ptr = self.alloc_builder.build_alloca(ty, &name).unwrap();
+            StmtType::VarDecl { name, value, ty } => {
+                let llvm_ty = self.llvm_type(ty);
+                let ptr = self.alloc_builder.build_alloca(llvm_ty, &name).unwrap();
 
                 let value = self.emit_expr(value);
                 self.alloc_builder.build_store(ptr, value).unwrap();
-                self.declared_vars.insert(name.to_string(), ptr);
+                self.declared_vars
+                    .insert(name.to_string(), (ptr, ty.clone()));
             }
             StmtType::Println(expr) => {
                 let value = self.emit_expr(expr);
@@ -346,6 +348,24 @@ impl<'ctx> CodeGen<'ctx> {
             _ => todo!(),
         }
     }
+
+    fn llvm_type(&self, ty: &ValueType) -> BasicTypeEnum<'ctx> {
+        match ty {
+            ValueType::I64 => self.context.i64_type().into(),
+            ValueType::U64 => self.context.i64_type().into(),
+            ValueType::Bool => self.context.bool_type().into(),
+            ValueType::F64 => self.context.f64_type().into(),
+            ValueType::Str => self.string_type().into(),
+            _ => todo!(),
+        }
+    }
+
+    fn string_type(&self) -> StructType<'ctx> {
+        let i8_ptr = self.context.ptr_type(AddressSpace::default());
+        self.context
+            .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false)
+    }
+
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
         use crate::token::Literal;
@@ -356,13 +376,12 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_expr(value)
             }
             ExprType::Identifier(name) => {
-                let ptr = self.declared_vars.get(name).unwrap();
-                self.builder
-                    .build_load(self.context.i64_type(), *ptr, name)
-                    .unwrap()
+                let (ptr, ty) = self.declared_vars.get(name).unwrap();
+                let x = self.llvm_type(ty);
+                self.builder.build_load(x, *ptr, name).unwrap()
             }
             ExprType::Assign { name, new_value } => {
-                let ptr = self.declared_vars.get(name).unwrap();
+                let (ptr, _) = self.declared_vars.get(name).unwrap();
                 let val = self.emit_expr(new_value).into_int_value();
 
                 self.builder.build_store(*ptr, val).unwrap();
