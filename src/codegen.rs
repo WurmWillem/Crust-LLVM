@@ -9,33 +9,15 @@ use inkwell::{AddressSpace, OptimizationLevel};
 use std::collections::HashMap;
 use std::error::Error;
 
+use crate::c_funcs::*;
 use crate::expression::{Expr, ExprType};
 use crate::statement::{Stmt, StmtType};
 use crate::value::ValueType;
 
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
 /// do `unsafe` operations internally.
-type MainFunc = unsafe extern "C" fn() -> i64;
 
-#[unsafe(no_mangle)]
-pub extern "C" fn print_u64(x: u64) {
-    println!("{}", x);
-}
-#[unsafe(no_mangle)]
-pub extern "C" fn print_i64(x: i64) {
-    println!("{}", x);
-}
-#[unsafe(no_mangle)]
-pub extern "C" fn print_f64(x: f64) {
-    println!("{}", x);
-}
-#[unsafe(no_mangle)]
-pub extern "C" fn print_str(ptr: *const u8, len: i64) {
-    let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
-
-    let s = std::str::from_utf8(slice).unwrap();
-    println!("{}", s);
-}
+pub type MainFunc = unsafe extern "C" fn() -> i64;
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
@@ -46,7 +28,6 @@ pub struct CodeGen<'ctx> {
     alloc_builder: Builder<'ctx>,
     declared_vars: HashMap<String, (PointerValue<'ctx>, ValueType)>,
 }
-
 impl<'ctx> CodeGen<'ctx> {
     pub fn compile(stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
@@ -87,7 +68,7 @@ impl<'ctx> CodeGen<'ctx> {
             unsafe { codegen.execution_engine.get_function("main").ok() }
                 .ok_or("Unable to get JIT function")?;
 
-        // codegen.module.print_to_stderr();
+        codegen.module.print_to_stderr();
 
         let start = std::time::Instant::now();
         unsafe {
