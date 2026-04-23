@@ -1,9 +1,9 @@
-use inkwell::OptimizationLevel;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
 use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::{AddressSpace, OptimizationLevel};
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -29,6 +29,13 @@ pub extern "C" fn print_i64(x: i64) {
 #[unsafe(no_mangle)]
 pub extern "C" fn print_f64(x: f64) {
     println!("{}", x);
+}
+#[unsafe(no_mangle)]
+pub extern "C" fn print_str(ptr: *const u8, len: i64) {
+    let slice = unsafe { std::slice::from_raw_parts(ptr, len as usize) };
+
+    let s = std::str::from_utf8(slice).unwrap();
+    println!("{}", s);
 }
 
 pub struct CodeGen<'ctx> {
@@ -72,6 +79,11 @@ impl<'ctx> CodeGen<'ctx> {
             .execution_engine
             .add_global_mapping(&print_f64_fn, print_f64 as usize);
 
+        let print_str_fn = codegen.module.get_function("print_str").unwrap();
+        codegen
+            .execution_engine
+            .add_global_mapping(&print_str_fn, print_str as usize);
+
         let main: JitFunction<MainFunc> =
             unsafe { codegen.execution_engine.get_function("main").ok() }
                 .ok_or("Unable to get JIT function")?;
@@ -91,9 +103,10 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn build_main(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
-        // Declare external print_i64
+        // declare external print_i64
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
+        let ptr_ty = self.context.ptr_type(AddressSpace::default());
 
         let print_i64_type = void_type.fn_type(&[i64_type.into()], false);
         self.module.add_function("print_i64", print_i64_type, None);
@@ -102,7 +115,10 @@ impl<'ctx> CodeGen<'ctx> {
         let print_f64_type = void_type.fn_type(&[self.context.f64_type().into()], false);
         self.module.add_function("print_f64", print_f64_type, None);
 
-        // Create main function
+        let print_str_type = void_type.fn_type(&[ptr_ty.into(), i64_type.into()], false);
+        self.module.add_function("print_str", print_str_type, None);
+
+        // create main function
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let function = self.module.add_function("main", fn_type, None);
 
@@ -307,10 +323,9 @@ impl<'ctx> CodeGen<'ctx> {
                     ValueType::F64 => self.module.get_function("print_f64").unwrap(),
                     ValueType::I64 => self.module.get_function("print_i64").unwrap(),
                     ValueType::U64 => self.module.get_function("print_u64").unwrap(),
-                    ValueType::Str => todo!(),
+                    ValueType::Str => self.module.get_function("print_str").unwrap(),
                     _ => unreachable!(),
                 };
-                self.module.get_function("print_i64").unwrap();
 
                 self.builder
                     .build_call(print_fn, &[value.into()], "printtmp")
@@ -360,6 +375,27 @@ impl<'ctx> CodeGen<'ctx> {
                 Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
                 Literal::True => self.context.bool_type().const_int(1, false).into(),
                 Literal::False => self.context.bool_type().const_int(0, false).into(),
+                Literal::Str(string) => {
+                    // self.emit_string_literal(text).into()
+                    let global = self
+                        .builder
+                        .build_global_string_ptr(&string, "string_lit")
+                        .unwrap();
+
+                    let len = self
+                        .context
+                        .i64_type()
+                        .const_int(string.len() as u64, false);
+
+                    let i8_ptr = self.context.ptr_type(AddressSpace::default());
+                    let string_llvm_ty = self
+                        .context
+                        .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false);
+
+                    string_llvm_ty
+                        .const_named_struct(&[global.as_pointer_value().into(), len.into()])
+                        .into()
+                }
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => {
