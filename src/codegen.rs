@@ -13,8 +13,6 @@ use crate::expression::{Expr, ExprType};
 use crate::statement::{Stmt, StmtType};
 use crate::value::ValueType;
 
-/// Convenience type alias for the `sum` function.
-///
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
 /// do `unsafe` operations internally.
 type MainFunc = unsafe extern "C" fn() -> i64;
@@ -369,7 +367,6 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
         use crate::token::Literal;
-        // let end_ty = expr.end_ty.clone();
         match &expr.expr {
             ExprType::Cast { value, target: _ } => {
                 // TODO: make this actually cast
@@ -406,12 +403,9 @@ impl<'ctx> CodeGen<'ctx> {
                         .i64_type()
                         .const_int(string.len() as u64, false);
 
-                    let i8_ptr = self.context.ptr_type(AddressSpace::default());
-                    let string_llvm_ty = self
-                        .context
-                        .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false);
+                    let str_ty = self.string_type();
 
-                    string_llvm_ty
+                    str_ty
                         .const_named_struct(&[global.as_pointer_value().into(), len.into()])
                         .into()
                 }
