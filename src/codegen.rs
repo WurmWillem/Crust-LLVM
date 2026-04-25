@@ -35,7 +35,7 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn compile(stmts: Vec<Stmt>, user_types: UserTypes) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
-        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
+        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
 
         let mut codegen = CodeGen {
             context: &context,
@@ -166,9 +166,6 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap()
                     .insert(name.clone(), (ptr, ty.clone()));
             }
-            // for d in data.parameters {
-            //     todo!();
-            // }
 
             for stmt in &mut data.body {
                 self.emit_stmt(&stmt);
@@ -191,6 +188,7 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
+    // TODO: make return result
     fn emit_stmt(&mut self, stmt: &Stmt) {
         // dbg!(stmt);
         match &stmt.stmt {
@@ -248,7 +246,11 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
             }
 
-            _ => todo!(),
+            StmtType::Return(expr) => {
+                let value = self.emit_expr(expr);
+                self.builder.build_return(Some(&value)).unwrap();
+            }
+            _ => unreachable!(),
         }
     }
 
@@ -286,6 +288,30 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),
+            ExprType::FuncCall { name, args, index } => {
+                let func = self.module.get_function(name).unwrap();
+
+                let llvm_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
+                    .iter()
+                    .map(|expr| self.emit_expr(expr).into())
+                    .collect();
+
+                let call_site = self
+                    .builder
+                    .build_call(func, &llvm_args, "calltmp")
+                    .unwrap();
+
+                // If function returns void
+                if func.get_type().get_return_type().is_none() {
+                    self.context.i64_type().const_int(0, false).into()
+                } else {
+                    call_site
+                        .try_as_basic_value()
+                        .expect_basic("to basic value")
+                }
+
+                // todo!()
+            }
             _ => todo!(),
         }
     }

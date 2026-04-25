@@ -1,9 +1,11 @@
 fn main() {
-    int x = 3;
-    int y = 2;
-    pr y - x;
+    pr fib(45);
 }
 
-fn sum() {
-    pr "hoi";
+fn fib(int n): int {
+    if n <= 1 {
+        return n;
+    } else {
+        return fib(n - 1) + fib(n - 2);
+    }
 }

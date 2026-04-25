@@ -685,8 +685,6 @@ impl Analyser {
             let can_coerce = !try_coerce(&mut arg.expr, param_ty);
 
             if !is_exact_match && !is_any && !is_array_match && can_coerce && !is_type_match {
-                dbg!(param_ty);
-                dbg!(&arg_ty);
                 let err_ty =
                     SemErrType::ParamTypeMismatch(name.to_string(), param_ty.clone(), arg_ty);
                 return Err(SemErr::new(line, err_ty));

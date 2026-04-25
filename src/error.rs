@@ -136,7 +136,7 @@ impl SemErr {
             }
             SemErrType::IncorrectReturnTy(expected, found) => {
                 format!(
-                    "Function expected return type {expected}, but found type {found}."
+                    "Function expected return type '{expected}', but found type '{found}'."
                 )
             }
             SemErrType::NoReturnTy(name, return_ty) => {
