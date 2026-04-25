@@ -49,6 +49,7 @@ impl core::fmt::Display for Operator {
     }
 }
 
+// TODO: rethink encapsulation
 #[derive(Debug, Clone)]
 pub struct FuncData {
     pub parameters: Vec<(ValueType, String)>,

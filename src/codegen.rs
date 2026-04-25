@@ -2,7 +2,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
-use inkwell::types::{BasicTypeEnum, StructType};
+use inkwell::types::{BasicMetadataTypeEnum, BasicTypeEnum, FunctionType, StructType};
 use inkwell::values::{BasicValueEnum, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 
@@ -35,7 +35,8 @@ impl<'ctx> CodeGen<'ctx> {
     pub fn compile(stmts: Vec<Stmt>, user_types: UserTypes) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
-        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
+        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
+
         let mut codegen = CodeGen {
             context: &context,
             module,
@@ -86,6 +87,55 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
+    fn make_fn_type(
+        &self,
+        ret: &ValueType,
+        params: &Vec<(ValueType, String)>,
+    ) -> FunctionType<'ctx> {
+        let params: Vec<BasicMetadataTypeEnum<'ctx>> = params
+            .iter()
+            .map(|(ty, _)| self.to_llvm_type(ty).into())
+            .collect();
+
+        match ret {
+            ValueType::Null => self.context.void_type().fn_type(&params, false),
+
+            _ => match self.to_llvm_type(ret) {
+                BasicTypeEnum::IntType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::FloatType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::PointerType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::StructType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::ArrayType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::VectorType(t) => t.fn_type(&params, false),
+                BasicTypeEnum::ScalableVectorType(t) => t.fn_type(&params, false),
+            },
+        }
+    }
+
+    fn build_funcs(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut funcs = std::mem::take(&mut self.user_types.funcs);
+
+        for (name, data) in funcs.iter_mut() {
+            // data.return_ty.
+            let fn_type = self.make_fn_type(&data.return_ty, &data.parameters);
+
+            let func = self.module.add_function(&name, fn_type, None);
+
+            let block = self.context.append_basic_block(func, "entry");
+            self.builder.position_at_end(block);
+            self.alloc_builder.position_at_end(block);
+
+            for stmt in &mut data.body {
+                self.emit_stmt(&stmt);
+            }
+            self.builder
+                .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
+        }
+
+        self.user_types.funcs = funcs;
+        Ok(())
+    }
+
     fn build_main(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
         // declare external print_i64
         let i64_type = self.context.i64_type();
@@ -103,19 +153,20 @@ impl<'ctx> CodeGen<'ctx> {
         self.module.add_function("print_str", print_str_type, None);
 
         // create main function
-        let fn_type = self.context.i64_type().fn_type(&[], false);
-        let function = self.module.add_function("main", fn_type, None);
+        self.build_funcs()?;
+        // let fn_type = self.context.i64_type().fn_type(&[], false);
+        // let function = self.module.add_function("main", fn_type, None);
+        //
+        // let basic_block = self.context.append_basic_block(function, "entry");
+        // self.builder.position_at_end(basic_block);
+        // self.alloc_builder.position_at_end(basic_block);
 
-        let basic_block = self.context.append_basic_block(function, "entry");
-        self.builder.position_at_end(basic_block);
-        self.alloc_builder.position_at_end(basic_block);
-
-        for stmt in &mut stmts {
-            self.emit_stmt(stmt);
-        }
-
-        self.builder
-            .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
+        // for stmt in &mut stmts {
+        //     self.emit_stmt(stmt);
+        // }
+        //
+        // self.builder
+        //     .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
 
         Ok(())
     }
@@ -150,7 +201,7 @@ impl<'ctx> CodeGen<'ctx> {
                 // self.builder.build_return(Some(&e)).unwrap();
             }
             StmtType::VarDecl { name, value, ty } => {
-                let llvm_ty = self.llvm_type(ty);
+                let llvm_ty = self.to_llvm_type(ty);
                 let ptr = self.alloc_builder.build_alloca(llvm_ty, &name).unwrap();
 
                 let value = self.emit_expr(value);
@@ -182,6 +233,7 @@ impl<'ctx> CodeGen<'ctx> {
                 return_ty: _,
                 use_self: _,
             } => {
+                todo!();
                 for stmt in body {
                     self.emit_stmt(stmt);
                 }
@@ -200,7 +252,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
             ExprType::Identifier(name) => {
                 let (ptr, ty) = self.declared_vars.get(name).unwrap();
-                let x = self.llvm_type(ty);
+                let x = self.to_llvm_type(ty);
                 self.builder.build_load(x, *ptr, name).unwrap()
             }
             ExprType::Assign { name, new_value } => {
@@ -223,9 +275,7 @@ impl<'ctx> CodeGen<'ctx> {
                 }
                 _ => todo!(),
             },
-            ExprType::Binary { left, op, right } => {
-                self.emit_binary_expr(left, op, right)
-            }
+            ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),
             _ => todo!(),
         }
     }
@@ -236,7 +286,7 @@ impl<'ctx> CodeGen<'ctx> {
             .struct_type(&[i8_ptr.into(), self.context.i64_type().into()], false)
     }
 
-    fn llvm_type(&self, ty: &ValueType) -> BasicTypeEnum<'ctx> {
+    fn to_llvm_type(&self, ty: &ValueType) -> BasicTypeEnum<'ctx> {
         match ty {
             ValueType::I64 => self.context.i64_type().into(),
             ValueType::U64 => self.context.i64_type().into(),
@@ -419,7 +469,12 @@ impl<'ctx> CodeGen<'ctx> {
         self.builder.position_at_end(end_block);
     }
 
-    fn emit_binary_expr(&self, left: &Box<Expr>, op: &crate::parse_types::BinaryOp, right: &Box<Expr>) -> BasicValueEnum<'_> {
+    fn emit_binary_expr(
+        &self,
+        left: &Box<Expr>,
+        op: &crate::parse_types::BinaryOp,
+        right: &Box<Expr>,
+    ) -> BasicValueEnum<'_> {
         use crate::parse_types::BinaryOp;
 
         let result: BasicValueEnum = match left.end_ty {
@@ -444,9 +499,7 @@ impl<'ctx> CodeGen<'ctx> {
                         .build_and(left, right, "andtmp")
                         .unwrap()
                         .into(),
-                    BinaryOp::Or => {
-                        self.builder.build_or(left, right, "ortmp").unwrap().into()
-                    }
+                    BinaryOp::Or => self.builder.build_or(left, right, "ortmp").unwrap().into(),
                     _ => unreachable!(),
                 }
             }

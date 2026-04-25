@@ -1,4 +1,3 @@
 fn main() {
-    // str x = "Hello World!";
-    str x = "Hello World!" + "hoi";
+    pr 3 + 2;
 }
