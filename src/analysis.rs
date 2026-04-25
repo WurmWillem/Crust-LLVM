@@ -598,7 +598,8 @@ impl Analyser {
 
         use BinaryOp as BO;
         let is_valid = match op {
-            BO::Add => left_ty.is_num() || left_ty == ValueType::Str,
+            // TODO: made adding strings illegal for now
+            BO::Add => left_ty.is_num(), /*|| left_ty == ValueType::Str, */
             BO::Sub | BO::Mul | BO::Div => left_ty.is_num(),
             BO::Equal | BO::NotEqual => return Ok(ValueType::Bool),
             BO::Less | BO::LessEqual | BO::Greater | BO::GreaterEqual => {
@@ -613,7 +614,7 @@ impl Analyser {
         if is_valid {
             Ok(left_ty)
         } else {
-            Err(SemErr::new(line, SemErrType::InvalidInfix))
+            Err(SemErr::new(line, SemErrType::InvalidInfixOp(left_ty, op.to_operator())))
         }
     }
 
@@ -642,7 +643,7 @@ impl Analyser {
                 }
                 Ok(value_ty)
             }
-            _ => Err(SemErr::new(line, SemErrType::InvalidPrefix)),
+            _ => Err(SemErr::new(line, SemErrType::InvalidPrefixOp)),
         }
     }
 

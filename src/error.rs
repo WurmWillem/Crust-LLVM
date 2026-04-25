@@ -4,8 +4,6 @@ use crate::{analysis_types::Operator, value::ValueType};
 
 pub const PRINT_TOKENS: bool = false;
 pub const PRINT_PARSE_TREE: bool = false;
-pub const DEBUG_TRACE_EXECUTION: bool = false;
-pub const PRINT_HEAP: bool = false;
 
 pub fn print_error(line: u32, msg: &str) {
     let l = "[line ".blue();
@@ -29,20 +27,6 @@ impl ParseErr {
         }
     }
 }
-
-#[derive(Debug)]
-pub struct EmitErr {
-    pub msg: String,
-    pub line: u32,
-}
-impl EmitErr {
-    pub fn new(line: u32, msg: &str) -> Self {
-        Self {
-            msg: msg.to_string(),
-            line,
-        }
-    }
-}
 #[derive(Debug)]
 pub struct SemErr {
     ty: SemErrType,
@@ -56,8 +40,8 @@ impl SemErr {
 #[derive(Debug)]
 pub enum SemErrType {
     NoMainFunc,
-    InvalidInfix,
-    InvalidPrefix,
+    InvalidInfixOp(ValueType, Operator),
+    InvalidPrefixOp,
     SelfOutsideStruct,
     SelfAsStaticStruct,
     InvalidStaticAccess,
@@ -98,8 +82,8 @@ impl SemErr {
     pub fn print(&self) {
         //dbg!(&self.ty);
         let msg = match &self.ty {
-            SemErrType::InvalidPrefix => "invalid prefix.".to_string(),
-            SemErrType::InvalidInfix => "invalid infix.".to_string(),
+            SemErrType::InvalidPrefixOp => "invalid prefix.".to_string(),
+            SemErrType::InvalidInfixOp(ty, op) => format!("Cannot apply operator '{}' to types {}.", op.to_string(), ty.to_string()),
             SemErrType::InvalidStaticAccess => "You can only use the '::' syntax for static methods.".to_string(),
             SemErrType::FuncDefInFunc(name) => format!("You attempted to define the function '{}' inside another function, which is illegal.", name.green()),
             SemErrType::StructDefInFunc(name) => format!("You attempted to define the struct '{}' inside a function, which is illegal.", name.green()),
