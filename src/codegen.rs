@@ -47,7 +47,7 @@ impl<'ctx> CodeGen<'ctx> {
             user_types,
         };
 
-        codegen.build_main(stmts)?;
+        codegen.build_file(stmts)?;
 
         let print_i64_fn = codegen.module.get_function("print_i64").unwrap();
         codegen
@@ -116,7 +116,7 @@ impl<'ctx> CodeGen<'ctx> {
         let mut funcs = std::mem::take(&mut self.user_types.funcs);
 
         for (name, data) in funcs.iter_mut() {
-            // data.return_ty.
+            // dbg!(&data.return_ty);
             let fn_type = self.make_fn_type(&data.return_ty, &data.parameters);
 
             let func = self.module.add_function(&name, fn_type, None);
@@ -128,15 +128,23 @@ impl<'ctx> CodeGen<'ctx> {
             for stmt in &mut data.body {
                 self.emit_stmt(&stmt);
             }
-            self.builder
-                .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
+
+            if self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_terminator()
+                .is_none()
+            {
+                self.builder.build_return(None)?;
+            }
         }
 
         self.user_types.funcs = funcs;
         Ok(())
     }
 
-    fn build_main(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
+    fn build_file(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
         // declare external print_i64
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();

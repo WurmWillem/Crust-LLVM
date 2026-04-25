@@ -1,3 +1,7 @@
 fn main() {
     pr 3 + 2;
 }
+
+fn sum() {
+    pr "hoi";
+}
