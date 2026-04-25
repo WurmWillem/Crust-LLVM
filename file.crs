@@ -1,5 +1,7 @@
 fn main() {
-    pr 3 + 2;
+    int x = 3;
+    int y = 2;
+    pr y - x;
 }
 
 fn sum() {

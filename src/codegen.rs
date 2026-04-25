@@ -18,7 +18,7 @@ use crate::value::ValueType;
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
 /// do `unsafe` operations internally.
 
-pub type MainFunc = unsafe extern "C" fn() -> i64;
+pub type MainFunc = unsafe extern "C" fn();
 
 pub struct CodeGen<'ctx> {
     context: &'ctx Context,
@@ -27,7 +27,7 @@ pub struct CodeGen<'ctx> {
     execution_engine: ExecutionEngine<'ctx>,
 
     alloc_builder: Builder<'ctx>,
-    declared_vars: HashMap<String, (PointerValue<'ctx>, ValueType)>,
+    declared_vars: Vec<HashMap<String, (PointerValue<'ctx>, ValueType)>>,
 
     user_types: UserTypes,
 }
@@ -43,11 +43,12 @@ impl<'ctx> CodeGen<'ctx> {
             builder: context.create_builder(),
             alloc_builder: context.create_builder(),
             execution_engine,
-            declared_vars: HashMap::new(),
+            declared_vars: vec![],
             user_types,
         };
 
-        codegen.build_file(stmts)?;
+        codegen.declare_funcs()?;
+        codegen.build_func_bodies()?;
 
         let print_i64_fn = codegen.module.get_function("print_i64").unwrap();
         codegen
@@ -112,40 +113,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn build_funcs(&mut self) -> Result<(), Box<dyn Error>> {
-        let mut funcs = std::mem::take(&mut self.user_types.funcs);
-
-        for (name, data) in funcs.iter_mut() {
-            // dbg!(&data.return_ty);
-            let fn_type = self.make_fn_type(&data.return_ty, &data.parameters);
-
-            let func = self.module.add_function(&name, fn_type, None);
-
-            let block = self.context.append_basic_block(func, "entry");
-            self.builder.position_at_end(block);
-            self.alloc_builder.position_at_end(block);
-
-            for stmt in &mut data.body {
-                self.emit_stmt(&stmt);
-            }
-
-            if self
-                .builder
-                .get_insert_block()
-                .unwrap()
-                .get_terminator()
-                .is_none()
-            {
-                self.builder.build_return(None)?;
-            }
-        }
-
-        self.user_types.funcs = funcs;
-        Ok(())
-    }
-
-    fn build_file(&mut self, mut stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
-        // declare external print_i64
+    fn declare_funcs(&mut self) -> Result<(), Box<dyn Error>> {
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
         let ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -160,22 +128,66 @@ impl<'ctx> CodeGen<'ctx> {
         let print_str_type = void_type.fn_type(&[ptr_ty.into(), i64_type.into()], false);
         self.module.add_function("print_str", print_str_type, None);
 
-        // create main function
-        self.build_funcs()?;
-        // let fn_type = self.context.i64_type().fn_type(&[], false);
-        // let function = self.module.add_function("main", fn_type, None);
-        //
-        // let basic_block = self.context.append_basic_block(function, "entry");
-        // self.builder.position_at_end(basic_block);
-        // self.alloc_builder.position_at_end(basic_block);
+        for (name, data) in &self.user_types.funcs {
+            // dbg!(&data.return_ty);
+            let fn_type = self.make_fn_type(&data.return_ty, &data.parameters);
+            if self.module.get_function(name).is_none() {
+                self.module.add_function(name, fn_type, None);
+            }
+        }
+        Ok(())
+    }
 
-        // for stmt in &mut stmts {
-        //     self.emit_stmt(stmt);
-        // }
-        //
-        // self.builder
-        //     .build_return(Some(&self.context.i64_type().const_int(0, false)))?;
+    fn build_func_bodies(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut funcs = std::mem::take(&mut self.user_types.funcs);
 
+        for (name, data) in funcs.iter_mut() {
+            // dbg!(&data.return_ty);
+            let func = self.module.get_function(name).unwrap();
+            let block = self.context.append_basic_block(func, "entry");
+
+            self.builder.position_at_end(block);
+            self.alloc_builder.position_at_end(block);
+
+            self.declared_vars.push(HashMap::new());
+            // add parameters
+            for (i, (ty, name)) in data.parameters.iter().enumerate() {
+                let param = func.get_nth_param(i as u32).unwrap();
+
+                let ptr = self
+                    .alloc_builder
+                    .build_alloca(self.to_llvm_type(ty), name)
+                    .unwrap();
+
+                self.builder.build_store(ptr, param).unwrap();
+
+                self.declared_vars
+                    .last_mut()
+                    .unwrap()
+                    .insert(name.clone(), (ptr, ty.clone()));
+            }
+            // for d in data.parameters {
+            //     todo!();
+            // }
+
+            for stmt in &mut data.body {
+                self.emit_stmt(&stmt);
+            }
+
+            self.declared_vars.pop().unwrap();
+
+            if self
+                .builder
+                .get_insert_block()
+                .unwrap()
+                .get_terminator()
+                .is_none()
+            {
+                self.builder.build_return(None)?;
+            }
+        }
+
+        self.user_types.funcs = funcs;
         Ok(())
     }
 
@@ -215,6 +227,8 @@ impl<'ctx> CodeGen<'ctx> {
                 let value = self.emit_expr(value);
                 self.alloc_builder.build_store(ptr, value).unwrap();
                 self.declared_vars
+                    .last_mut()
+                    .unwrap()
                     .insert(name.to_string(), (ptr, ty.clone()));
             }
             StmtType::Println(expr) => {
@@ -234,18 +248,6 @@ impl<'ctx> CodeGen<'ctx> {
                     .unwrap();
             }
 
-            StmtType::Func {
-                name: _,
-                parameters: _,
-                body,
-                return_ty: _,
-                use_self: _,
-            } => {
-                todo!();
-                for stmt in body {
-                    self.emit_stmt(stmt);
-                }
-            }
             _ => todo!(),
         }
     }
@@ -259,12 +261,12 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_expr(value)
             }
             ExprType::Identifier(name) => {
-                let (ptr, ty) = self.declared_vars.get(name).unwrap();
+                let (ptr, ty) = self.declared_vars.last().unwrap().get(name).unwrap();
                 let x = self.to_llvm_type(ty);
                 self.builder.build_load(x, *ptr, name).unwrap()
             }
             ExprType::Assign { name, new_value } => {
-                let (ptr, _) = self.declared_vars.get(name).unwrap();
+                let (ptr, _) = self.declared_vars.last().unwrap().get(name).unwrap();
                 let val = self.emit_expr(new_value).into_int_value();
 
                 self.builder.build_store(*ptr, val).unwrap();
@@ -405,7 +407,7 @@ impl<'ctx> CodeGen<'ctx> {
         } else {
             unreachable!();
         };
-        let (i_ptr, _) = self.declared_vars.get(name).unwrap();
+        let (i_ptr, _) = self.declared_vars.last().unwrap().get(name).unwrap();
         let x = self
             .builder
             .build_load(self.context.i64_type(), *i_ptr, "load_i")
