@@ -1,4 +1,5 @@
 use analysis::Analyser;
+use codegen::CodeGen;
 use error::{PRINT_PARSE_TREE, PRINT_TOKENS};
 use scanner::Scanner;
 
@@ -61,13 +62,13 @@ fn main() {
         dbg!(&statements);
     }
 
-    let _ = match Analyser::analyse_stmts(&mut statements) {
-        Some(func_data) => func_data,
+    let user_types = match Analyser::analyse_stmts(&mut statements) {
+        Some(types) => types,
         None => return,
     };
 
     // let mut codegen = Codegen::new();
-    match codegen::CodeGen::compile(statements) {
+    match CodeGen::compile(statements, user_types) {
         Ok(_) => (),
         Err(e) => println!("{}", e),
     }

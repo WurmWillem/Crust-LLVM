@@ -130,12 +130,13 @@ impl StructData {
     }
 }
 
-pub struct EnityData {
+pub struct UserTypes {
+    // TODO: maybe change to private
     pub funcs: HashMap<String, FuncData>,
     pub structs: HashMap<String, StructData>,
     pub enums: HashMap<String, Vec<String>>,
 }
-impl EnityData {
+impl UserTypes {
     pub fn new() -> Self {
         Self {
             funcs: HashMap::new(),

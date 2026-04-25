@@ -1,5 +1,5 @@
 use crate::{
-    analysis_types::{EnityData, FuncData, Operator, SemanticScope, StructData, Symbol},
+    analysis_types::{UserTypes, FuncData, Operator, SemanticScope, StructData, Symbol},
     error::{SemErr, SemErrType},
     expression::{Expr, ExprType},
     parse_types::BinaryOp,
@@ -9,7 +9,7 @@ use crate::{
 };
 
 pub struct Analyser {
-    entities: EnityData,
+    user_types: UserTypes,
     symbols: SemanticScope,
     current_return_ty: Option<ValueType>,
     current_use_self: bool,
@@ -21,13 +21,13 @@ impl Analyser {
         Self {
             symbols: SemanticScope::new(),
             current_return_ty: None,
-            entities: EnityData::new(),
+            user_types: UserTypes::new(),
             current_struct: None,
             return_stmt_found: false,
             current_use_self: false,
         }
     }
-    pub fn analyse_stmts(stmts: &mut Vec<Stmt>) -> Option<EnityData> {
+    pub fn analyse_stmts(stmts: &mut Vec<Stmt>) -> Option<UserTypes> {
         let mut analyser = Analyser::new();
         if let Err(err) = analyser.init_type_data(stmts) {
             err.print();
@@ -41,7 +41,7 @@ impl Analyser {
             }
         }
 
-        Some(analyser.entities)
+        Some(analyser.user_types)
     }
 
     fn init_type_data(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), SemErr> {
@@ -49,7 +49,7 @@ impl Analyser {
             let line = stmt.line;
             if let StmtType::Enum { name, variants } = &stmt.stmt {
                 if self
-                    .entities
+                    .user_types
                     .enums
                     .insert(name.to_string(), variants.clone())
                     .is_some()
@@ -74,7 +74,7 @@ impl Analyser {
                 };
 
                 if self
-                    .entities
+                    .user_types
                     .funcs
                     .insert(name.to_string(), func_data)
                     .is_some()
@@ -98,7 +98,7 @@ impl Analyser {
                 let mut method_data = vec![];
 
                 if self
-                    .entities
+                    .user_types
                     .structs
                     .insert(name.to_string(), struct_data)
                     .is_some()
@@ -129,7 +129,7 @@ impl Analyser {
                     }
                 }
 
-                self.entities.structs.get_mut(name).unwrap().methods = method_data.clone();
+                self.user_types.structs.get_mut(name).unwrap().methods = method_data.clone();
 
                 for (i, method) in methods.iter_mut().enumerate() {
                     self.analyse_stmt(method)?;
@@ -141,13 +141,13 @@ impl Analyser {
                     }
                 }
 
-                self.entities.structs.get_mut(name).unwrap().methods = method_data;
+                self.user_types.structs.get_mut(name).unwrap().methods = method_data;
                 self.current_struct = None;
                 // self.symbols.declare(Symbol::new("Foo", ValueType::Struct(())), line)
             }
         }
 
-        if !self.entities.funcs.contains_key("main") {
+        if !self.user_types.funcs.contains_key("main") {
             let err_ty = SemErrType::NoMainFunc;
             return Err(SemErr::new(0, err_ty));
         }
@@ -162,15 +162,15 @@ impl Analyser {
             }
             StmtType::VarDecl { name, value, ty } => {
                 if let ValueType::UnknownType(name) = ty {
-                    if !self.entities.structs.contains_key(name as &str)
-                        && !self.entities.enums.contains_key(name as &str)
+                    if !self.user_types.structs.contains_key(name as &str)
+                        && !self.user_types.enums.contains_key(name as &str)
                     {
                         let err = SemErrType::UndefinedType(name.clone());
                         return Err(SemErr::new(line, err));
                     }
                 }
 
-                self.entities.resolve_value_ty(ty);
+                self.user_types.resolve_value_ty(ty);
                 let value_ty = self.analyse_expr(value)?;
 
                 if value_ty != *ty
@@ -367,7 +367,7 @@ impl Analyser {
             let ty = SemErrType::InvalidStaticAccess;
             return Err(SemErr::new(line, ty));
         };
-        let Some(variants) = self.entities.enums.get(name) else {
+        let Some(variants) = self.user_types.enums.get(name) else {
             let ty = SemErrType::InvalidStaticAccess;
             return Err(SemErr::new(line, ty));
         };
@@ -404,7 +404,7 @@ impl Analyser {
         self.symbols.begin_scope();
 
         for (ty, name) in parameters {
-            self.entities.resolve_value_ty(ty);
+            self.user_types.resolve_value_ty(ty);
             self.symbols
                 .declare(Symbol::new(name.to_string(), ty.clone()), line)?;
         }
@@ -414,7 +414,7 @@ impl Analyser {
             self.analyse_stmt(stmt)?;
         }
 
-        if let Some(func) = self.entities.funcs.get_mut(name) {
+        if let Some(func) = self.user_types.funcs.get_mut(name) {
             func.body = body.to_owned();
         }
 
@@ -471,7 +471,7 @@ impl Analyser {
         }
 
         let (index, return_ty, use_self, parameters) =
-            if let Some(data) = self.entities.structs.get(&name as &str) {
+            if let Some(data) = self.user_types.structs.get(&name as &str) {
                 data.get_method_data(&name, property, line)?
             } else {
                 let ty = SemErrType::UndefinedType(name);
@@ -516,12 +516,12 @@ impl Analyser {
         }
         // dbg!(&inst);
         if let ExprType::Identifier(ref name) = inst.expr {
-            if self.entities.structs.contains_key(name) {
+            if self.user_types.structs.contains_key(name) {
                 return Ok(name.to_string());
             }
         }
         let mut inst_ty = self.analyse_expr(inst)?;
-        self.entities.resolve_value_ty(&mut inst_ty);
+        self.user_types.resolve_value_ty(&mut inst_ty);
 
         let ValueType::Struct(name) = inst_ty.clone() else {
             let ty = SemErrType::InvalidTypeMethodAccess(inst_ty);
@@ -584,8 +584,8 @@ impl Analyser {
     ) -> Result<ValueType, SemErr> {
         let mut left_ty = self.analyse_expr(left)?;
         let mut right_ty = self.analyse_expr(right)?;
-        self.entities.resolve_value_ty(&mut left_ty);
-        self.entities.resolve_value_ty(&mut right_ty);
+        self.user_types.resolve_value_ty(&mut left_ty);
+        self.user_types.resolve_value_ty(&mut right_ty);
 
         if left_ty != right_ty
             && !try_coerce(&mut right.expr, &left_ty)
@@ -614,7 +614,10 @@ impl Analyser {
         if is_valid {
             Ok(left_ty)
         } else {
-            Err(SemErr::new(line, SemErrType::InvalidInfixOp(left_ty, op.to_operator())))
+            Err(SemErr::new(
+                line,
+                SemErrType::InvalidInfixOp(left_ty, op.to_operator()),
+            ))
         }
     }
 
@@ -712,7 +715,7 @@ impl Analyser {
             name.to_string()
         } else {
             let mut inst_ty = self.analyse_expr(inst)?;
-            self.entities.resolve_value_ty(&mut inst_ty);
+            self.user_types.resolve_value_ty(&mut inst_ty);
 
             let ValueType::Struct(name) = inst_ty else {
                 let ty = SemErrType::InvalidTypeFieldAccess(inst_ty);
@@ -720,7 +723,7 @@ impl Analyser {
             };
             name
         };
-        let Some(data) = self.entities.structs.get(&name as &str) else {
+        let Some(data) = self.user_types.structs.get(&name as &str) else {
             let ty = SemErrType::UndefinedType(name);
             return Err(SemErr::new(line, ty));
         };
@@ -754,13 +757,13 @@ impl Analyser {
         name: &String,
         line: u32,
     ) -> Result<(ValueType, Vec<ValueType>), SemErr> {
-        if let Some(data) = self.entities.structs.get(name) {
+        if let Some(data) = self.user_types.structs.get(name) {
             let params = data.fields.iter().map(|(ty, _)| ty.clone()).collect();
             let return_ty = ValueType::Struct(name.to_string());
             return Ok((return_ty, params));
         }
 
-        if let Some(data) = self.entities.funcs.get(name) {
+        if let Some(data) = self.user_types.funcs.get(name) {
             let parameters = data.parameters.iter().map(|p| p.0.clone()).collect();
             let return_ty = data.return_ty.clone();
 
@@ -772,6 +775,7 @@ impl Analyser {
     }
 }
 
+// TODO: remove coercing
 fn try_coerce(expr: &mut ExprType, target: &ValueType) -> bool {
     match expr {
         ExprType::Lit(lit) => match (&lit, target) {

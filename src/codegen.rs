@@ -9,6 +9,7 @@ use inkwell::{AddressSpace, OptimizationLevel};
 use std::collections::HashMap;
 use std::error::Error;
 
+use crate::analysis_types::UserTypes;
 use crate::c_funcs::*;
 use crate::expression::{Expr, ExprType};
 use crate::statement::{Stmt, StmtType};
@@ -27,9 +28,11 @@ pub struct CodeGen<'ctx> {
 
     alloc_builder: Builder<'ctx>,
     declared_vars: HashMap<String, (PointerValue<'ctx>, ValueType)>,
+
+    user_types: UserTypes,
 }
 impl<'ctx> CodeGen<'ctx> {
-    pub fn compile(stmts: Vec<Stmt>) -> Result<(), Box<dyn Error>> {
+    pub fn compile(stmts: Vec<Stmt>, user_types: UserTypes) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
@@ -40,6 +43,7 @@ impl<'ctx> CodeGen<'ctx> {
             alloc_builder: context.create_builder(),
             execution_engine,
             declared_vars: HashMap::new(),
+            user_types,
         };
 
         codegen.build_main(stmts)?;
