@@ -1,7 +1,8 @@
 fn main() {
-    pr fib(15);
-}
-
-fn fib(int n): str {
-    return "hoi";
+    int x = 0;
+    {
+        int x = 1;
+        pr x;
+    }
+    pr x;
 }

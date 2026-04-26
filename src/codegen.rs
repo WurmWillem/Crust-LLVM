@@ -74,7 +74,7 @@ impl<'ctx> CodeGen<'ctx> {
             unsafe { codegen.execution_engine.get_function("main").ok() }
                 .ok_or("Unable to get JIT function")?;
 
-        codegen.module.print_to_stderr();
+        // codegen.module.print_to_stderr();
 
         let start = std::time::Instant::now();
         unsafe {
@@ -210,9 +210,11 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_if_stmt(condition, body, final_else);
             }
             StmtType::Block(stmts) => {
+                self.declared_vars.push(HashMap::new());
                 for stmt in stmts {
                     self.emit_stmt(stmt);
                 }
+                self.declared_vars.pop().unwrap();
             }
             StmtType::Expr(expr) => {
                 let _ = self.emit_expr(expr);
@@ -254,6 +256,10 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
+    fn find_var(&self, name: &String) -> Option<&(PointerValue<'ctx>, ValueType)> {
+        self.declared_vars.iter().rev().find_map(|scope| scope.get(name))
+    }
+
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
         use crate::token::Literal;
@@ -263,7 +269,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.emit_expr(value)
             }
             ExprType::Identifier(name) => {
-                let (ptr, ty) = self.declared_vars.last().unwrap().get(name).unwrap();
+                let (ptr, ty) = self.find_var(name).unwrap();
                 let x = self.to_llvm_type(ty);
                 self.builder.build_load(x, *ptr, name).unwrap()
             }
@@ -285,7 +291,11 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),
-            ExprType::FuncCall { name, args, index } => {
+            ExprType::FuncCall {
+                name,
+                args,
+                index: _,
+            } => {
                 let func = self.module.get_function(name).unwrap();
 
                 let llvm_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
@@ -306,8 +316,6 @@ impl<'ctx> CodeGen<'ctx> {
                         .try_as_basic_value()
                         .expect_basic("to basic value")
                 }
-
-                // todo!()
             }
             _ => todo!(),
         }
