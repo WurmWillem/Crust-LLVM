@@ -32,7 +32,7 @@ pub struct CodeGen<'ctx> {
     user_types: UserTypes,
 }
 impl<'ctx> CodeGen<'ctx> {
-    pub fn compile(stmts: Vec<Stmt>, user_types: UserTypes) -> Result<(), Box<dyn Error>> {
+    pub fn compile(user_types: UserTypes) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
         let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
@@ -281,10 +281,7 @@ impl<'ctx> CodeGen<'ctx> {
                 Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
                 Literal::True => self.context.bool_type().const_int(1, false).into(),
                 Literal::False => self.context.bool_type().const_int(0, false).into(),
-                Literal::Str(string) => {
-                    // self.emit_string_literal(text).into()
-                    self.emit_str_expr(string)
-                }
+                Literal::Str(string) => self.emit_str_expr(string),
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),

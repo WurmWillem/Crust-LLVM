@@ -48,7 +48,7 @@ fn main() {
         println!();
     }
 
-    let mut statements = match parser::Parser::compile(tokens) {
+    let statements = match parser::Parser::compile(tokens) {
         Some(statements) => statements,
         None => {
             println!(
@@ -62,17 +62,13 @@ fn main() {
         dbg!(&statements);
     }
 
-    let user_types = match Analyser::analyse_stmts(&mut statements) {
+    let user_types = match Analyser::analyse_stmts(statements) {
         Some(types) => types,
         None => return,
     };
 
-    // let mut codegen = Codegen::new();
-    match CodeGen::compile(statements, user_types) {
+    match CodeGen::compile(user_types) {
         Ok(_) => (),
         Err(e) => println!("{}", e),
     }
-    // codegen.compile();
-    // codegen.compile_statements(statements);
-    // codegen.write_to_file("out.asm");
 }

@@ -27,14 +27,14 @@ impl Analyser {
             current_use_self: false,
         }
     }
-    pub fn analyse_stmts(stmts: &mut Vec<Stmt>) -> Option<UserTypes> {
+    pub fn analyse_stmts(mut stmts: Vec<Stmt>) -> Option<UserTypes> {
         let mut analyser = Analyser::new();
-        if let Err(err) = analyser.init_type_data(stmts) {
+        if let Err(err) = analyser.init_type_data(&mut stmts) {
             err.print();
             return None;
         }
 
-        for stmt in stmts {
+        for stmt in &mut stmts {
             if let Err(err) = analyser.analyse_stmt(stmt) {
                 err.print();
                 return None;
