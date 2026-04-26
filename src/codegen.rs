@@ -274,7 +274,7 @@ impl<'ctx> CodeGen<'ctx> {
                 self.builder.build_load(x, *ptr, name).unwrap()
             }
             ExprType::Assign { name, new_value } => {
-                let (ptr, _) = self.declared_vars.last().unwrap().get(name).unwrap();
+                let (ptr, _) = self.find_var(name).unwrap();
                 let val = self.emit_expr(new_value).into_int_value();
 
                 self.builder.build_store(*ptr, val).unwrap();
