@@ -225,7 +225,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let ptr = self.alloc_builder.build_alloca(llvm_ty, &name).unwrap();
 
                 let value = self.emit_expr(value);
-                self.alloc_builder.build_store(ptr, value).unwrap();
+                self.builder.build_store(ptr, value).unwrap();
                 self.declared_vars
                     .last_mut()
                     .unwrap()
@@ -275,11 +275,11 @@ impl<'ctx> CodeGen<'ctx> {
             }
             ExprType::Assign { name, new_value } => {
                 let (ptr, _) = self.find_var(name).unwrap();
-                let val = self.emit_expr(new_value).into_int_value();
+                let val = self.emit_expr(new_value);
 
                 self.builder.build_store(*ptr, val).unwrap();
 
-                val.into()
+                val
             }
             ExprType::Lit(literal) => match literal {
                 Literal::I64(n) => self.context.i64_type().const_int(*n as u64, true).into(),
@@ -310,7 +310,7 @@ impl<'ctx> CodeGen<'ctx> {
 
                 // If function returns void
                 if func.get_type().get_return_type().is_none() {
-                    self.context.i64_type().const_int(0, false).into()
+                    unreachable!()
                 } else {
                     call_site
                         .try_as_basic_value()

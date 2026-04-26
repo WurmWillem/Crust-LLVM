@@ -1,7 +1,7 @@
 fn main() {
-    int x = 0;
+    str x = "sdfsd";
     {
-        x = 1;
+        x = "hoi";
         pr x;
     }
     pr x;
