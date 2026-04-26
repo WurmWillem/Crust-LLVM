@@ -35,7 +35,7 @@ pub enum ExprType {
     },
     Cast {
         value: Box<Expr>,
-        target: ValueType,
+        target_ty: ValueType,
     },
     MethodCall {
         inst: Box<Expr>,

@@ -426,7 +426,7 @@ impl Parser {
         let end = Box::new(self.expression()?);
         let cast = ExprType::Cast {
             value: end,
-            target: ValueType::I64,
+            target_ty: ValueType::I64,
         };
         let cast = Expr::new(cast, line);
 
@@ -707,7 +707,7 @@ impl Parser {
         if let Some(target) = self.peek().as_value_type() {
             self.advance();
             let value = Box::new(value);
-            let ty = ExprType::Cast { value, target };
+            let ty = ExprType::Cast { value, target_ty: target };
 
             Ok(Expr::new(ty, line))
         } else {

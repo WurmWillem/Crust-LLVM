@@ -1,5 +1,5 @@
 use crate::{
-    analysis_types::{UserTypes, FuncData, Operator, SemanticScope, StructData, Symbol},
+    analysis_types::{FuncData, Operator, SemanticScope, StructData, Symbol, UserTypes},
     error::{SemErr, SemErrType},
     expression::{Expr, ExprType},
     parse_types::BinaryOp,
@@ -334,13 +334,17 @@ impl Analyser {
                 };
                 return_ty
             }
-            ExprType::Cast { value, target } => {
+            ExprType::Cast { value, target_ty } => {
                 let value_ty = self.analyse_expr(value)?;
-                if !value_ty.is_num() || !target.is_num() {
-                    let ty = SemErrType::InvalidCast(target.clone(), value_ty);
+
+                if (!value_ty.is_num() && value_ty != ValueType::Bool)
+                    || (!target_ty.is_num() && *target_ty != ValueType::Bool)
+                {
+                    let ty = SemErrType::InvalidCast(target_ty.clone(), value_ty);
                     return Err(SemErr::new(line, ty));
                 }
-                target.clone()
+
+                target_ty.clone()
             }
             ExprType::Colon { inst, property } => {
                 let (ty, index) = self.get_enum_variant_data(inst, property, line)?;

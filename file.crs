@@ -1,8 +1,4 @@
 fn main() {
-    str x = "sdfsd";
-    {
-        x = "hoi";
-        pr x;
-    }
+    bool x = -12312 as bool;
     pr x;
 }

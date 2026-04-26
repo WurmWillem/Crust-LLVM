@@ -257,16 +257,113 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn find_var(&self, name: &String) -> Option<&(PointerValue<'ctx>, ValueType)> {
-        self.declared_vars.iter().rev().find_map(|scope| scope.get(name))
+        self.declared_vars
+            .iter()
+            .rev()
+            .find_map(|scope| scope.get(name))
     }
 
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
         // dbg!(&expr.expr);
+        // TODO: make it so unary have precedence over casting
         use crate::token::Literal;
         match &expr.expr {
-            ExprType::Cast { value, target: _ } => {
-                // TODO: make this actually cast
-                self.emit_expr(value)
+            ExprType::Cast { value, target_ty } => {
+                let source_ty = value.end_ty.clone();
+                let val = self.emit_expr(value);
+
+                match (source_ty, target_ty) {
+                    (ValueType::I64, ValueType::F64) => self
+                        .builder
+                        .build_signed_int_to_float(
+                            val.into_int_value(),
+                            self.context.f64_type(),
+                            "cast_i64_f64",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    (ValueType::U64, ValueType::F64) => self
+                        .builder
+                        .build_unsigned_int_to_float(
+                            val.into_int_value(),
+                            self.context.f64_type(),
+                            "cast_u64_f64",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    (ValueType::Bool, ValueType::F64) => self
+                        .builder
+                        .build_unsigned_int_to_float(
+                            val.into_int_value(),
+                            self.context.f64_type(),
+                            "cast_bool_f64",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    (ValueType::F64, ValueType::I64) => self
+                        .builder
+                        .build_float_to_signed_int(
+                            val.into_float_value(),
+                            self.context.i64_type(),
+                            "cast_f64_i64",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    (ValueType::F64, ValueType::U64) => self
+                        .builder
+                        .build_float_to_unsigned_int(
+                            val.into_float_value(),
+                            self.context.i64_type(),
+                            "cast_f64_u64",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    (ValueType::F64, ValueType::Bool) => {
+                        let zero = self.context.f64_type().const_float(0.0);
+                        self.builder
+                            .build_float_compare(
+                                inkwell::FloatPredicate::ONE,
+                                val.into_float_value(),
+                                zero,
+                                "cast_f64_bool",
+                            )
+                            .unwrap()
+                            .into()
+                    }
+
+                    // between integer types (I64, U64, Bool), same bit width, just reinterpret
+                    (ValueType::I64, ValueType::U64) | (ValueType::U64, ValueType::I64) => val,
+
+                    (ValueType::I64, ValueType::Bool) | (ValueType::U64, ValueType::Bool) => {
+                        let zero = self.context.i64_type().const_int(0, false);
+                        self.builder
+                            .build_int_compare(
+                                inkwell::IntPredicate::NE,
+                                val.into_int_value(),
+                                zero,
+                                "cast_int_bool",
+                            )
+                            .unwrap()
+                            .into()
+                    }
+
+                    (ValueType::Bool, ValueType::I64) | (ValueType::Bool, ValueType::U64) => self
+                        .builder
+                        .build_int_z_extend(
+                            val.into_int_value(),
+                            self.context.i64_type(),
+                            "cast_bool_int",
+                        )
+                        .unwrap()
+                        .into(),
+
+                    _ => unimplemented!()
+                }
             }
             ExprType::Identifier(name) => {
                 let (ptr, ty) = self.find_var(name).unwrap();
