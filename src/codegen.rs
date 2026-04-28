@@ -47,7 +47,7 @@ impl<'ctx> CodeGen<'ctx> {
             user_types,
         };
 
-        codegen.declare_funcs()?;
+        codegen.declare_funcs();
         codegen.build_func_bodies()?;
 
         let print_i64_fn = codegen.module.get_function("print_i64").unwrap();
@@ -110,7 +110,7 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn declare_funcs(&mut self) -> Result<(), Box<dyn Error>> {
+    fn declare_funcs(&mut self) {
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
         let ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -132,10 +132,9 @@ impl<'ctx> CodeGen<'ctx> {
                 self.module.add_function(name, fn_type, None);
             }
         }
-        Ok(())
     }
 
-    fn build_func_bodies(&mut self) -> Result<(), Box<dyn Error>> {
+    fn build_func_bodies(&mut self) -> Result<(), BuilderError> {
         let mut funcs = std::mem::take(&mut self.user_types.funcs);
 
         for (name, data) in funcs.iter_mut() {
@@ -153,10 +152,9 @@ impl<'ctx> CodeGen<'ctx> {
 
                 let ptr = self
                     .alloc_builder
-                    .build_alloca(self.to_llvm_type(ty), name)
-                    .unwrap();
+                    .build_alloca(self.to_llvm_type(ty), name)?;
 
-                self.builder.build_store(ptr, param).unwrap();
+                self.builder.build_store(ptr, param)?;
 
                 self.declared_vars
                     .last_mut()
@@ -165,7 +163,7 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             for stmt in &mut data.body {
-                self.emit_stmt(&stmt);
+                self.emit_stmt(&stmt)?;
             }
 
             self.declared_vars.pop().unwrap();
@@ -185,7 +183,6 @@ impl<'ctx> CodeGen<'ctx> {
         Ok(())
     }
 
-    // TODO: make return result
     fn emit_stmt(&mut self, stmt: &Stmt) -> Result<(), BuilderError> {
         // dbg!(stmt);
         match &stmt.stmt {
@@ -204,7 +201,7 @@ impl<'ctx> CodeGen<'ctx> {
                 body,
                 final_else,
             } => {
-                self.emit_if_stmt(condition, body, final_else);
+                self.emit_if_stmt(condition, body, final_else)?;
             }
             StmtType::Block(stmts) => {
                 self.declared_vars.push(HashMap::new());
@@ -218,10 +215,10 @@ impl<'ctx> CodeGen<'ctx> {
             }
             StmtType::VarDecl { name, value, ty } => {
                 let llvm_ty = self.to_llvm_type(ty);
-                let ptr = self.alloc_builder.build_alloca(llvm_ty, &name).unwrap();
+                let ptr = self.alloc_builder.build_alloca(llvm_ty, &name)?;
 
                 let value = self.emit_expr(value)?;
-                self.builder.build_store(ptr, value).unwrap();
+                self.builder.build_store(ptr, value)?;
                 self.declared_vars
                     .last_mut()
                     .unwrap()
@@ -240,8 +237,7 @@ impl<'ctx> CodeGen<'ctx> {
                 };
 
                 self.builder
-                    .build_call(print_fn, &[value.into()], "printtmp")
-                    .unwrap();
+                    .build_call(print_fn, &[value.into()], "printtmp")?;
             }
 
             StmtType::Return(expr) => {
@@ -299,11 +295,10 @@ impl<'ctx> CodeGen<'ctx> {
             } => {
                 let func = self.module.get_function(name).unwrap();
 
-                // TODO: fix unwrap
                 let llvm_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
                     .iter()
-                    .map(|expr| self.emit_expr(expr).unwrap().into())
-                    .collect();
+                    .map(|expr| self.emit_expr(expr).map(|v| v.into()))
+                    .collect::<Result<Vec<_>, _>>()?;
 
                 let call_site = self.builder.build_call(func, &llvm_args, "calltmp")?;
 
@@ -373,11 +368,10 @@ impl<'ctx> CodeGen<'ctx> {
         let end_block = self.context.append_basic_block(function, "if_end");
 
         self.builder
-            .build_conditional_branch(condition, then_block, else_block)
-            .unwrap();
+            .build_conditional_branch(condition, then_block, else_block)?;
 
         self.builder.position_at_end(then_block);
-        self.emit_stmt(&body);
+        self.emit_stmt(&body)?;
         if self
             .builder
             .get_insert_block()
@@ -385,13 +379,13 @@ impl<'ctx> CodeGen<'ctx> {
             .get_terminator()
             .is_none()
         {
-            self.builder.build_unconditional_branch(end_block).unwrap();
+            self.builder.build_unconditional_branch(end_block)?;
         }
 
         self.builder.position_at_end(else_block);
 
         if let Some(else_stmt) = final_else {
-            self.emit_stmt(else_stmt);
+            self.emit_stmt(else_stmt)?;
         }
 
         if self
@@ -401,7 +395,7 @@ impl<'ctx> CodeGen<'ctx> {
             .get_terminator()
             .is_none()
         {
-            self.builder.build_unconditional_branch(end_block).unwrap();
+            self.builder.build_unconditional_branch(end_block)?;
         }
 
         self.builder.position_at_end(end_block);
@@ -421,26 +415,23 @@ impl<'ctx> CodeGen<'ctx> {
             .get_parent()
             .unwrap();
 
-        self.emit_stmt(var);
+        self.emit_stmt(var)?;
 
         let condition_block = self.context.append_basic_block(function, "for_condition");
         let body_block = self.context.append_basic_block(function, "for_body");
         let end_block = self.context.append_basic_block(function, "for_end");
 
-        self.builder
-            .build_unconditional_branch(condition_block)
-            .unwrap();
+        self.builder.build_unconditional_branch(condition_block)?;
 
         // condition block
         self.builder.position_at_end(condition_block);
         let condition = self.emit_expr(condition)?.into_int_value();
         self.builder
-            .build_conditional_branch(condition, body_block, end_block)
-            .unwrap();
+            .build_conditional_branch(condition, body_block, end_block)?;
 
         // body block
         self.builder.position_at_end(body_block);
-        self.emit_stmt(&body);
+        self.emit_stmt(&body)?;
 
         let name = if let StmtType::VarDecl { name, .. } = &var.stmt {
             name
@@ -450,12 +441,11 @@ impl<'ctx> CodeGen<'ctx> {
         let (i_ptr, _) = self.declared_vars.last().unwrap().get(name).unwrap();
         let x = self
             .builder
-            .build_load(self.context.i64_type(), *i_ptr, "load_i")
-            .unwrap()
+            .build_load(self.context.i64_type(), *i_ptr, "load_i")?
             .into_int_value();
         let one = self.context.i64_type().const_int(1, false);
-        let new_i = self.builder.build_int_add(x, one, "add_i_tmp").unwrap();
-        self.builder.build_store(*i_ptr, new_i).unwrap();
+        let new_i = self.builder.build_int_add(x, one, "add_i_tmp")?;
+        self.builder.build_store(*i_ptr, new_i)?;
 
         // let stmt = Sm
 
@@ -466,9 +456,7 @@ impl<'ctx> CodeGen<'ctx> {
             .get_terminator()
             .is_none()
         {
-            self.builder
-                .build_unconditional_branch(condition_block)
-                .unwrap();
+            self.builder.build_unconditional_branch(condition_block)?;
         }
 
         // end block
@@ -488,21 +476,18 @@ impl<'ctx> CodeGen<'ctx> {
         let condition_block = self.context.append_basic_block(function, "while_condition");
         let end_block = self.context.append_basic_block(function, "while_end");
 
-        self.builder
-            .build_unconditional_branch(condition_block)
-            .unwrap();
+        self.builder.build_unconditional_branch(condition_block)?;
 
         // condition block
         self.builder.position_at_end(condition_block);
         let condition = self.emit_expr(condition)?.into_int_value();
 
         self.builder
-            .build_conditional_branch(condition, body_block, end_block)
-            .unwrap();
+            .build_conditional_branch(condition, body_block, end_block)?;
 
         // body block
         self.builder.position_at_end(body_block);
-        self.emit_stmt(&body);
+        self.emit_stmt(&body)?;
 
         if self
             .builder
@@ -511,9 +496,7 @@ impl<'ctx> CodeGen<'ctx> {
             .get_terminator()
             .is_none()
         {
-            self.builder
-                .build_unconditional_branch(condition_block)
-                .unwrap();
+            self.builder.build_unconditional_branch(condition_block)?;
         }
 
         // end block

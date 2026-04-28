@@ -69,6 +69,6 @@ fn main() {
 
     match CodeGen::compile(user_types) {
         Ok(_) => (),
-        Err(e) => println!("{}", e),
+        Err(e) => println!("{}", format!("Encountered build error: {}", e).red()),
     }
 }
