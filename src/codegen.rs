@@ -218,7 +218,6 @@ impl<'ctx> CodeGen<'ctx> {
             }
             StmtType::Expr(expr) => {
                 let _ = self.emit_expr(expr);
-                // self.builder.build_return(Some(&e)).unwrap();
             }
             StmtType::VarDecl { name, value, ty } => {
                 let llvm_ty = self.to_llvm_type(ty);
@@ -264,8 +263,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
-        dbg!(&expr.expr);
-        // TODO: make it so unary have precedence over casting
+        // dbg!(&expr.expr);
         use crate::token::Literal;
         match &expr.expr {
             ExprType::Cast { value, target_ty } => self.emit_cast(value, target_ty),
@@ -292,7 +290,7 @@ impl<'ctx> CodeGen<'ctx> {
                 _ => todo!(),
             },
             ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),
-            ExprType::Unary { prefix, value } => self.emit_unary_expr(prefix, value),
+            ExprType::Unary { prefix: _, value } => self.emit_unary_expr(value),
             ExprType::FuncCall {
                 name,
                 args,
@@ -514,7 +512,6 @@ impl<'ctx> CodeGen<'ctx> {
 
     fn emit_unary_expr(
         &self,
-        prefix: &crate::token::TokenType,
         value: &Box<Expr>,
     ) -> BasicValueEnum<'_> {
         match value.end_ty {
