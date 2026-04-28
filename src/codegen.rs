@@ -1,4 +1,4 @@
-use inkwell::builder::Builder;
+use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::Module;
@@ -186,18 +186,18 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     // TODO: make return result
-    fn emit_stmt(&mut self, stmt: &Stmt) {
+    fn emit_stmt(&mut self, stmt: &Stmt) -> Result<(), BuilderError> {
         // dbg!(stmt);
         match &stmt.stmt {
             StmtType::While { condition, body } => {
-                self.emit_while_stmt(condition, body);
+                self.emit_while_stmt(condition, body)?;
             }
             StmtType::For {
                 var,
                 condition,
                 body,
             } => {
-                self.emit_for_stmt(var, condition, body);
+                self.emit_for_stmt(var, condition, body)?;
             }
             StmtType::If {
                 condition,
@@ -209,7 +209,7 @@ impl<'ctx> CodeGen<'ctx> {
             StmtType::Block(stmts) => {
                 self.declared_vars.push(HashMap::new());
                 for stmt in stmts {
-                    self.emit_stmt(stmt);
+                    self.emit_stmt(stmt)?;
                 }
                 self.declared_vars.pop().unwrap();
             }
@@ -220,7 +220,7 @@ impl<'ctx> CodeGen<'ctx> {
                 let llvm_ty = self.to_llvm_type(ty);
                 let ptr = self.alloc_builder.build_alloca(llvm_ty, &name).unwrap();
 
-                let value = self.emit_expr(value);
+                let value = self.emit_expr(value)?;
                 self.builder.build_store(ptr, value).unwrap();
                 self.declared_vars
                     .last_mut()
@@ -228,7 +228,7 @@ impl<'ctx> CodeGen<'ctx> {
                     .insert(name.to_string(), (ptr, ty.clone()));
             }
             StmtType::Println(expr) => {
-                let value = self.emit_expr(expr);
+                let value = self.emit_expr(expr)?;
                 let print_fn = match expr.end_ty {
                     ValueType::Null => todo!(),
                     ValueType::Bool => self.module.get_function("print_i64").unwrap(),
@@ -245,11 +245,12 @@ impl<'ctx> CodeGen<'ctx> {
             }
 
             StmtType::Return(expr) => {
-                let value = self.emit_expr(expr);
-                self.builder.build_return(Some(&value)).unwrap();
+                let value = self.emit_expr(expr)?;
+                self.builder.build_return(Some(&value))?;
             }
             _ => unreachable!(),
-        }
+        };
+        Ok(())
     }
 
     fn find_var(&self, name: &String) -> Option<&(PointerValue<'ctx>, ValueType)> {
@@ -259,7 +260,7 @@ impl<'ctx> CodeGen<'ctx> {
             .find_map(|scope| scope.get(name))
     }
 
-    fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
+    fn emit_expr(&self, expr: &Expr) -> Result<BasicValueEnum, BuilderError> {
         // dbg!(&expr.expr);
         use crate::token::Literal;
         match &expr.expr {
@@ -267,25 +268,28 @@ impl<'ctx> CodeGen<'ctx> {
             ExprType::Identifier(name) => {
                 let (ptr, ty) = self.find_var(name).unwrap();
                 let x = self.to_llvm_type(ty);
-                self.builder.build_load(x, *ptr, name).unwrap()
+                self.builder.build_load(x, *ptr, name)
             }
             ExprType::Assign { name, new_value } => {
                 let (ptr, _) = self.find_var(name).unwrap();
-                let val = self.emit_expr(new_value);
+                let val = self.emit_expr(new_value)?;
 
-                self.builder.build_store(*ptr, val).unwrap();
+                self.builder.build_store(*ptr, val)?;
 
-                val
+                Ok(val)
             }
-            ExprType::Lit(literal) => match literal {
-                Literal::I64(n) => self.context.i64_type().const_int(*n as u64, true).into(),
-                Literal::U64(n) => self.context.i64_type().const_int(*n, false).into(),
-                Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
-                Literal::True => self.context.bool_type().const_int(1, false).into(),
-                Literal::False => self.context.bool_type().const_int(0, false).into(),
-                Literal::Str(string) => self.emit_str_expr(string),
-                _ => todo!(),
-            },
+            ExprType::Lit(literal) => {
+                let result = match literal {
+                    Literal::I64(n) => self.context.i64_type().const_int(*n as u64, true).into(),
+                    Literal::U64(n) => self.context.i64_type().const_int(*n, false).into(),
+                    Literal::F64(n) => self.context.f64_type().const_float(*n).into(),
+                    Literal::True => self.context.bool_type().const_int(1, false).into(),
+                    Literal::False => self.context.bool_type().const_int(0, false).into(),
+                    Literal::Str(string) => self.emit_str_expr(string)?,
+                    _ => todo!(),
+                };
+                Ok(result)
+            }
             ExprType::Binary { left, op, right } => self.emit_binary_expr(left, op, right),
             ExprType::Unary { prefix: _, value } => self.emit_unary_expr(value),
             ExprType::FuncCall {
@@ -295,23 +299,21 @@ impl<'ctx> CodeGen<'ctx> {
             } => {
                 let func = self.module.get_function(name).unwrap();
 
+                // TODO: fix unwrap
                 let llvm_args: Vec<inkwell::values::BasicMetadataValueEnum> = args
                     .iter()
-                    .map(|expr| self.emit_expr(expr).into())
+                    .map(|expr| self.emit_expr(expr).unwrap().into())
                     .collect();
 
-                let call_site = self
-                    .builder
-                    .build_call(func, &llvm_args, "calltmp")
-                    .unwrap();
+                let call_site = self.builder.build_call(func, &llvm_args, "calltmp")?;
 
                 // If function returns void
                 if func.get_type().get_return_type().is_none() {
                     unreachable!()
                 } else {
-                    call_site
+                    Ok(call_site
                         .try_as_basic_value()
-                        .expect_basic("to basic value")
+                        .expect_basic("to basic value"))
                 }
             }
             _ => todo!(),
@@ -335,11 +337,10 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn emit_str_expr(&self, string: &String) -> BasicValueEnum<'_> {
+    fn emit_str_expr(&self, string: &String) -> Result<BasicValueEnum<'_>, BuilderError> {
         let global = self
             .builder
-            .build_global_string_ptr(&string, "string_lit")
-            .unwrap();
+            .build_global_string_ptr(&string, "string_lit")?;
 
         let len = self
             .context
@@ -348,13 +349,18 @@ impl<'ctx> CodeGen<'ctx> {
 
         let str_ty = self.string_type();
 
-        str_ty
+        Ok(str_ty
             .const_named_struct(&[global.as_pointer_value().into(), len.into()])
-            .into()
+            .into())
     }
 
-    fn emit_if_stmt(&mut self, condition: &Expr, body: &Box<Stmt>, final_else: &Option<Box<Stmt>>) {
-        let condition = self.emit_expr(condition).into_int_value();
+    fn emit_if_stmt(
+        &mut self,
+        condition: &Expr,
+        body: &Box<Stmt>,
+        final_else: &Option<Box<Stmt>>,
+    ) -> Result<(), BuilderError> {
+        let condition = self.emit_expr(condition)?.into_int_value();
         let function = self
             .builder
             .get_insert_block()
@@ -399,9 +405,15 @@ impl<'ctx> CodeGen<'ctx> {
         }
 
         self.builder.position_at_end(end_block);
+        Ok(())
     }
 
-    fn emit_for_stmt(&mut self, var: &Box<Stmt>, condition: &Expr, body: &Box<Stmt>) {
+    fn emit_for_stmt(
+        &mut self,
+        var: &Box<Stmt>,
+        condition: &Expr,
+        body: &Box<Stmt>,
+    ) -> Result<(), BuilderError> {
         let function = self
             .builder
             .get_insert_block()
@@ -421,7 +433,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // condition block
         self.builder.position_at_end(condition_block);
-        let condition = self.emit_expr(condition).into_int_value();
+        let condition = self.emit_expr(condition)?.into_int_value();
         self.builder
             .build_conditional_branch(condition, body_block, end_block)
             .unwrap();
@@ -461,9 +473,10 @@ impl<'ctx> CodeGen<'ctx> {
 
         // end block
         self.builder.position_at_end(end_block);
+        Ok(())
     }
 
-    fn emit_while_stmt(&mut self, condition: &Expr, body: &Box<Stmt>) {
+    fn emit_while_stmt(&mut self, condition: &Expr, body: &Box<Stmt>) -> Result<(), BuilderError> {
         let function = self
             .builder
             .get_insert_block()
@@ -481,7 +494,7 @@ impl<'ctx> CodeGen<'ctx> {
 
         // condition block
         self.builder.position_at_end(condition_block);
-        let condition = self.emit_expr(condition).into_int_value();
+        let condition = self.emit_expr(condition)?.into_int_value();
 
         self.builder
             .build_conditional_branch(condition, body_block, end_block)
@@ -505,30 +518,26 @@ impl<'ctx> CodeGen<'ctx> {
 
         // end block
         self.builder.position_at_end(end_block);
+        Ok(())
     }
 
-    fn emit_unary_expr(
-        &self,
-        value: &Box<Expr>,
-    ) -> BasicValueEnum<'_> {
-        match value.end_ty {
+    fn emit_unary_expr(&self, value: &Box<Expr>) -> Result<BasicValueEnum<'_>, BuilderError> {
+        let result = match value.end_ty {
             ValueType::Bool => {
-                let value = self.emit_expr(value).into_int_value();
-                self.builder.build_not(value, "nottmp").unwrap().into()
+                let value = self.emit_expr(value)?.into_int_value();
+                self.builder.build_not(value, "nottmp")?.into()
             }
             ValueType::I64 => {
-                let value = self.emit_expr(value).into_int_value();
-                self.builder.build_int_neg(value, "negtmp").unwrap().into()
+                let value = self.emit_expr(value)?.into_int_value();
+                self.builder.build_int_neg(value, "negtmp")?.into()
             }
             ValueType::F64 => {
-                let value = self.emit_expr(value).into_float_value();
-                self.builder
-                    .build_float_neg(value, "fnegtmp")
-                    .unwrap()
-                    .into()
+                let value = self.emit_expr(value)?.into_float_value();
+                self.builder.build_float_neg(value, "fnegtmp")?.into()
             }
             _ => unreachable!(),
-        }
+        };
+        Ok(result)
     }
 
     fn emit_binary_expr(
@@ -536,230 +545,167 @@ impl<'ctx> CodeGen<'ctx> {
         left: &Box<Expr>,
         op: &crate::parse_types::BinaryOp,
         right: &Box<Expr>,
-    ) -> BasicValueEnum<'_> {
+    ) -> Result<BasicValueEnum<'_>, BuilderError> {
         use crate::parse_types::BinaryOp;
 
         let result = match left.end_ty {
             ValueType::Bool => {
-                let left = self.emit_expr(left).into_int_value();
-                let right = self.emit_expr(right).into_int_value();
+                let left = self.emit_expr(left)?.into_int_value();
+                let right = self.emit_expr(right)?.into_int_value();
                 use inkwell::IntPredicate::*;
 
                 match op {
                     BinaryOp::Equal => self
                         .builder
-                        .build_int_compare(EQ, left, right, "eqtmp")
-                        .unwrap()
+                        .build_int_compare(EQ, left, right, "eqtmp")?
                         .into(),
                     BinaryOp::NotEqual => self
                         .builder
-                        .build_int_compare(NE, left, right, "neqtmp")
-                        .unwrap()
+                        .build_int_compare(NE, left, right, "neqtmp")?
                         .into(),
-                    BinaryOp::And => self
-                        .builder
-                        .build_and(left, right, "andtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Or => self.builder.build_or(left, right, "ortmp").unwrap().into(),
+                    BinaryOp::And => self.builder.build_and(left, right, "andtmp")?.into(),
+                    BinaryOp::Or => self.builder.build_or(left, right, "ortmp")?.into(),
                     _ => unreachable!(),
                 }
             }
             ValueType::I64 => {
-                let left = self.emit_expr(left).into_int_value();
-                let right = self.emit_expr(right).into_int_value();
+                let left = self.emit_expr(left)?.into_int_value();
+                let right = self.emit_expr(right)?.into_int_value();
                 use inkwell::IntPredicate::*;
 
                 match op {
-                    BinaryOp::Add => self
-                        .builder
-                        .build_int_add(left, right, "addtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Sub => self
-                        .builder
-                        .build_int_sub(left, right, "subtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Mul => self
-                        .builder
-                        .build_int_mul(left, right, "multmp")
-                        .unwrap()
-                        .into(),
+                    BinaryOp::Add => self.builder.build_int_add(left, right, "addtmp")?.into(),
+                    BinaryOp::Sub => self.builder.build_int_sub(left, right, "subtmp")?.into(),
+                    BinaryOp::Mul => self.builder.build_int_mul(left, right, "multmp")?.into(),
                     BinaryOp::Div => self
                         .builder
-                        .build_int_signed_div(left, right, "divtmp")
-                        .unwrap()
+                        .build_int_signed_div(left, right, "divtmp")?
                         .into(),
                     BinaryOp::Equal => self
                         .builder
-                        .build_int_compare(EQ, left, right, "eqtmp")
-                        .unwrap()
+                        .build_int_compare(EQ, left, right, "eqtmp")?
                         .into(),
                     BinaryOp::NotEqual => self
                         .builder
-                        .build_int_compare(NE, left, right, "neqtmp")
-                        .unwrap()
+                        .build_int_compare(NE, left, right, "neqtmp")?
                         .into(),
                     BinaryOp::Less => self
                         .builder
-                        .build_int_compare(SLT, left, right, "slttmp")
-                        .unwrap()
+                        .build_int_compare(SLT, left, right, "slttmp")?
                         .into(),
                     BinaryOp::LessEqual => self
                         .builder
-                        .build_int_compare(SLE, left, right, "sletmp")
-                        .unwrap()
+                        .build_int_compare(SLE, left, right, "sletmp")?
                         .into(),
                     BinaryOp::Greater => self
                         .builder
-                        .build_int_compare(SGT, left, right, "sgttmp")
-                        .unwrap()
+                        .build_int_compare(SGT, left, right, "sgttmp")?
                         .into(),
                     BinaryOp::GreaterEqual => self
                         .builder
-                        .build_int_compare(SGE, left, right, "sgetmp")
-                        .unwrap()
+                        .build_int_compare(SGE, left, right, "sgetmp")?
                         .into(),
                     _ => unreachable!(),
                 }
             }
             ValueType::F64 => {
-                let left = self.emit_expr(left).into_float_value();
-                let right = self.emit_expr(right).into_float_value();
+                let left = self.emit_expr(left)?.into_float_value();
+                let right = self.emit_expr(right)?.into_float_value();
                 use inkwell::FloatPredicate::*;
 
                 match op {
-                    BinaryOp::Add => self
-                        .builder
-                        .build_float_add(left, right, "addtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Sub => self
-                        .builder
-                        .build_float_sub(left, right, "subtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Mul => self
-                        .builder
-                        .build_float_mul(left, right, "multmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Div => self
-                        .builder
-                        .build_float_div(left, right, "divtmp")
-                        .unwrap()
-                        .into(),
+                    BinaryOp::Add => self.builder.build_float_add(left, right, "addtmp")?.into(),
+                    BinaryOp::Sub => self.builder.build_float_sub(left, right, "subtmp")?.into(),
+                    BinaryOp::Mul => self.builder.build_float_mul(left, right, "multmp")?.into(),
+                    BinaryOp::Div => self.builder.build_float_div(left, right, "divtmp")?.into(),
                     BinaryOp::Equal => self
                         .builder
-                        .build_float_compare(OEQ, left, right, "eqtmp")
-                        .unwrap()
+                        .build_float_compare(OEQ, left, right, "eqtmp")?
                         .into(),
                     BinaryOp::NotEqual => self
                         .builder
-                        .build_float_compare(ONE, left, right, "neqtmp")
-                        .unwrap()
+                        .build_float_compare(ONE, left, right, "neqtmp")?
                         .into(),
                     BinaryOp::Less => self
                         .builder
-                        .build_float_compare(OLT, left, right, "slttmp")
-                        .unwrap()
+                        .build_float_compare(OLT, left, right, "slttmp")?
                         .into(),
                     BinaryOp::LessEqual => self
                         .builder
-                        .build_float_compare(OLE, left, right, "sletmp")
-                        .unwrap()
+                        .build_float_compare(OLE, left, right, "sletmp")?
                         .into(),
                     BinaryOp::Greater => self
                         .builder
-                        .build_float_compare(OGT, left, right, "sgttmp")
-                        .unwrap()
+                        .build_float_compare(OGT, left, right, "sgttmp")?
                         .into(),
                     BinaryOp::GreaterEqual => self
                         .builder
-                        .build_float_compare(OGE, left, right, "sgetmp")
-                        .unwrap()
+                        .build_float_compare(OGE, left, right, "sgetmp")?
                         .into(),
                     _ => unreachable!(),
                 }
             }
             ValueType::U64 => {
-                let left = self.emit_expr(left).into_int_value();
-                let right = self.emit_expr(right).into_int_value();
+                let left = self.emit_expr(left)?.into_int_value();
+                let right = self.emit_expr(right)?.into_int_value();
                 use inkwell::IntPredicate::*;
 
                 match op {
-                    BinaryOp::Add => self
-                        .builder
-                        .build_int_add(left, right, "addtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Sub => self
-                        .builder
-                        .build_int_sub(left, right, "subtmp")
-                        .unwrap()
-                        .into(),
-                    BinaryOp::Mul => self
-                        .builder
-                        .build_int_mul(left, right, "multmp")
-                        .unwrap()
-                        .into(),
+                    BinaryOp::Add => self.builder.build_int_add(left, right, "addtmp")?.into(),
+                    BinaryOp::Sub => self.builder.build_int_sub(left, right, "subtmp")?.into(),
+                    BinaryOp::Mul => self.builder.build_int_mul(left, right, "multmp")?.into(),
                     BinaryOp::Div => self
                         .builder
-                        .build_int_unsigned_div(left, right, "divtmp")
-                        .unwrap()
+                        .build_int_unsigned_div(left, right, "divtmp")?
                         .into(),
                     BinaryOp::Equal => self
                         .builder
-                        .build_int_compare(EQ, left, right, "eqtmp")
-                        .unwrap()
+                        .build_int_compare(EQ, left, right, "eqtmp")?
                         .into(),
                     BinaryOp::NotEqual => self
                         .builder
-                        .build_int_compare(NE, left, right, "neqtmp")
-                        .unwrap()
+                        .build_int_compare(NE, left, right, "neqtmp")?
                         .into(),
                     BinaryOp::Less => self
                         .builder
-                        .build_int_compare(ULT, left, right, "ulttmp")
-                        .unwrap()
+                        .build_int_compare(ULT, left, right, "ulttmp")?
                         .into(),
                     BinaryOp::LessEqual => self
                         .builder
-                        .build_int_compare(ULE, left, right, "uletmp")
-                        .unwrap()
+                        .build_int_compare(ULE, left, right, "uletmp")?
                         .into(),
                     BinaryOp::Greater => self
                         .builder
-                        .build_int_compare(UGT, left, right, "ugttmp")
-                        .unwrap()
+                        .build_int_compare(UGT, left, right, "ugttmp")?
                         .into(),
                     BinaryOp::GreaterEqual => self
                         .builder
-                        .build_int_compare(UGE, left, right, "ugetmp")
-                        .unwrap()
+                        .build_int_compare(UGE, left, right, "ugetmp")?
                         .into(),
                     _ => unreachable!(),
                 }
             }
             _ => unreachable!(),
         };
-        result
+        Ok(result)
     }
 
-    fn emit_cast(&self, value: &Box<Expr>, target_ty: &ValueType) -> BasicValueEnum<'_> {
+    fn emit_cast(
+        &self,
+        value: &Box<Expr>,
+        target_ty: &ValueType,
+    ) -> Result<BasicValueEnum<'_>, BuilderError> {
         let source_ty = value.end_ty.clone();
-        let val = self.emit_expr(value);
+        let val = self.emit_expr(value)?;
 
-        match (source_ty, target_ty) {
+        let result = match (source_ty, target_ty) {
             (ValueType::I64, ValueType::F64) => self
                 .builder
                 .build_signed_int_to_float(
                     val.into_int_value(),
                     self.context.f64_type(),
                     "cast_i64_f64",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             (ValueType::U64, ValueType::F64) => self
@@ -768,8 +714,7 @@ impl<'ctx> CodeGen<'ctx> {
                     val.into_int_value(),
                     self.context.f64_type(),
                     "cast_u64_f64",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             (ValueType::Bool, ValueType::F64) => self
@@ -778,8 +723,7 @@ impl<'ctx> CodeGen<'ctx> {
                     val.into_int_value(),
                     self.context.f64_type(),
                     "cast_bool_f64",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             (ValueType::F64, ValueType::I64) => self
@@ -788,8 +732,7 @@ impl<'ctx> CodeGen<'ctx> {
                     val.into_float_value(),
                     self.context.i64_type(),
                     "cast_f64_i64",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             (ValueType::F64, ValueType::U64) => self
@@ -798,8 +741,7 @@ impl<'ctx> CodeGen<'ctx> {
                     val.into_float_value(),
                     self.context.i64_type(),
                     "cast_f64_u64",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             (ValueType::F64, ValueType::Bool) => {
@@ -810,8 +752,7 @@ impl<'ctx> CodeGen<'ctx> {
                         val.into_float_value(),
                         zero,
                         "cast_f64_bool",
-                    )
-                    .unwrap()
+                    )?
                     .into()
             }
 
@@ -826,8 +767,7 @@ impl<'ctx> CodeGen<'ctx> {
                         val.into_int_value(),
                         zero,
                         "cast_int_bool",
-                    )
-                    .unwrap()
+                    )?
                     .into()
             }
 
@@ -837,11 +777,11 @@ impl<'ctx> CodeGen<'ctx> {
                     val.into_int_value(),
                     self.context.i64_type(),
                     "cast_bool_int",
-                )
-                .unwrap()
+                )?
                 .into(),
 
             _ => unimplemented!(),
-        }
+        };
+        Ok(result)
     }
 }
