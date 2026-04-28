@@ -1,4 +1,4 @@
 fn main() {
-    bool x = -12312 as bool;
-    pr x;
+    uint x = 3;
+    pr -(x as int);
 }
