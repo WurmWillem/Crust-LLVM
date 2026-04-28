@@ -46,7 +46,7 @@ impl Analyser {
 
     fn init_type_data(&mut self, stmts: &mut Vec<Stmt>) -> Result<(), SemErr> {
         for stmt in stmts {
-            let line = stmt.line;
+            let line = stmt.get_line();
             if let StmtType::Enum { name, variants } = &stmt.stmt {
                 if self
                     .user_types
@@ -69,7 +69,7 @@ impl Analyser {
                     parameters: parameters.clone(),
                     body: vec![],
                     return_ty: return_ty.clone(),
-                    line: stmt.line,
+                    line,
                     use_self: *use_self,
                 };
 
@@ -120,7 +120,7 @@ impl Analyser {
                             parameters: parameters.clone(),
                             body: vec![],
                             return_ty: return_ty.clone(),
-                            line: stmt.line,
+                            line,
                             use_self: *use_self,
                         };
                         method_data.push((name.to_string(), func_data));
@@ -155,7 +155,7 @@ impl Analyser {
     }
 
     fn analyse_stmt(&mut self, stmt: &mut Stmt) -> Result<(), SemErr> {
-        let line = stmt.line;
+        let line = stmt.get_line();
         match &mut stmt.stmt {
             StmtType::Expr(expr) => {
                 self.analyse_expr(expr)?;

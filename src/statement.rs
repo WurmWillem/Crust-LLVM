@@ -3,12 +3,14 @@ use crate::{expression::Expr, value::ValueType};
 #[derive(Debug, Clone)]
 pub struct Stmt {
     pub stmt: StmtType,
-    // TODO: make this private add getter
-    pub line: u32,
+    line: u32,
 }
 impl Stmt {
     pub fn new(stmt: StmtType, line: u32) -> Stmt {
         Stmt { stmt, line }
+    }
+    pub fn get_line(&self) -> u32 {
+        self.line
     }
 }
 

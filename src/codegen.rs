@@ -81,9 +81,6 @@ impl<'ctx> CodeGen<'ctx> {
             main.call();
         }
         println!("{:?}", start.elapsed());
-        // unsafe {
-        //     println!("main returns '{}'", main.call());
-        // }
 
         Ok(())
     }
