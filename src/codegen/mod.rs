@@ -1,3 +1,8 @@
+mod emit_expr;
+mod emit_stmt;
+mod types;
+mod codegen;
+
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
@@ -76,11 +81,11 @@ impl<'ctx> CodeGen<'ctx> {
 
         // codegen.module.print_to_stderr();
 
-        let start = std::time::Instant::now();
+        // let start = std::time::Instant::now();
         unsafe {
             main.call();
         }
-        println!("{:?}", start.elapsed());
+        // println!("{:?}", start.elapsed());
 
         Ok(())
     }
