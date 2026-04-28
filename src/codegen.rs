@@ -264,7 +264,7 @@ impl<'ctx> CodeGen<'ctx> {
     }
 
     fn emit_expr(&self, expr: &Expr) -> BasicValueEnum {
-        // dbg!(&expr.expr);
+        dbg!(&expr.expr);
         // TODO: make it so unary have precedence over casting
         use crate::token::Literal;
         match &expr.expr {

@@ -59,6 +59,7 @@ impl Parser {
             let infix = self.previous().ty.to_parse_rule().infix;
             expr = self.execute_infix(expr, infix, can_assign)?;
         }
+        dbg!(&expr);
         Ok(expr)
     }
 

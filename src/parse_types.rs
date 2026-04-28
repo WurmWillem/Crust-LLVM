@@ -11,6 +11,7 @@ pub enum Precedence {
     Comparison, // < > <= >=
     Term,       // + -
     Factor,     // * /
+    Cast,       // as
     Unary,      // ! -
     Call,       // . ()
 }
@@ -24,7 +25,8 @@ impl Precedence {
             Equality => Comparison,
             Comparison => Term,
             Term => Factor,
-            Factor => Unary,
+            Factor => Cast,
+            Cast => Unary,
             Unary => Call,
             Call => Primary,
             Primary => Primary,
@@ -42,8 +44,9 @@ impl std::convert::From<u8> for Precedence {
             5 => Self::Comparison,
             6 => Self::Term,
             7 => Self::Factor,
-            8 => Self::Unary,
-            9 => Self::Call,
+            8 => Self::Cast,
+            9 => Self::Unary,
+            10 => Self::Call,
             _ => panic!("Not a valid value for Precedence."),
         }
     }

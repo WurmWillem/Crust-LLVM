@@ -164,7 +164,7 @@ impl TokenType {
             TT::Identifier => ParseRule::new(F::Var, F::Empty, P::Primary),
             TT::StringLit => ParseRule::new(F::String, F::Empty, P::Primary),
             TT::Num => ParseRule::new(F::Number, F::Empty, P::Primary),
-            TT::As => ParseRule::new(F::Number, F::Cast, P::Call),
+            TT::As => ParseRule::new(F::Number, F::Cast, P::Cast),
             TT::And => ParseRule::new(F::Empty, F::Binary, P::And),
             TT::Or => ParseRule::new(F::Empty, F::Binary, P::Or),
             TT::False | TT::True | TT::Null => ParseRule::new(F::Literal, F::Empty, P::Primary),
