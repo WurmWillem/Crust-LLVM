@@ -1,0 +1,493 @@
+use super::Analyser;
+
+use crate::{
+    analysis::types::{SemErr, SemErrType},
+    binary_op::BinaryOp,
+    expression::{Expr, ExprType},
+    token::{Literal, TokenType},
+    value::ValueType,
+};
+
+use super::types::Operator;
+
+impl Analyser {
+    pub fn analyse_expr(&mut self, expr: &mut Expr) -> Result<ValueType, SemErr> {
+        let line = expr.get_line();
+        let result = match &mut expr.expr {
+            ExprType::Lit(lit) => lit.as_value_type(),
+            ExprType::Identifier(name) => match self.symbols.resolve(name) {
+                Some(symbol) => symbol.ty,
+                None => {
+                    let ty = SemErrType::UndefinedVar(name.to_string());
+                    return Err(SemErr::new(line, ty));
+                }
+            },
+            ExprType::FuncCall { name, args, index } => {
+                let (return_ty, parameters) = self.get_called_func_data(name, line)?;
+                self.check_if_params_and_args_correspond(args, parameters, name.to_string(), line)?;
+                *index = Some(0);
+                return_ty
+            }
+            ExprType::Assign {
+                name,
+                new_value: value,
+            } => self.analyse_assign(name, value, line)?,
+            ExprType::Unary { prefix, value } => self.analyse_unary(value, *prefix, line)?,
+            ExprType::Binary { left, op, right } => self.analyse_binary(left, right, *op, line)?,
+            ExprType::Array(values) => self.analyse_array_expr(values, line)?,
+            ExprType::Index { arr, index: _ } => {
+                let arr = self.analyse_expr(arr)?;
+                match arr {
+                    ValueType::Arr(ty) => *ty,
+                    _ => {
+                        let ty = SemErrType::IndexNonArr(arr);
+                        return Err(SemErr::new(line, ty));
+                    }
+                }
+            }
+            ExprType::AssignIndex {
+                arr,
+                index: _,
+                new_value: value,
+            } => self.analyse_assign_index(arr, value, line)?,
+            ExprType::Dot { inst, property } => {
+                let (return_ty, new_expr) = self.analyse_dot(None, inst, line, property)?;
+                expr.expr = new_expr;
+                return_ty
+            }
+            ExprType::DotAssign {
+                inst,
+                property,
+                new_value,
+            } => {
+                let (return_ty, new_expr) =
+                    self.analyse_dot(Some(new_value), inst, line, property)?;
+                expr.expr = new_expr;
+                return_ty
+            }
+            ExprType::MethodCall {
+                inst,
+                property,
+                args,
+                is_static,
+            } => {
+                let (index, return_ty, use_self) =
+                    self.analyse_method_call(inst, property, line, args, *is_static)?;
+
+                expr.expr = ExprType::MethodCallResolved {
+                    inst: inst.clone(),
+                    index,
+                    args: args.clone(),
+                    use_self,
+                };
+                return_ty
+            }
+            ExprType::Cast { value, target_ty } => {
+                let value_ty = self.analyse_expr(value)?;
+
+                if (!value_ty.is_num() && value_ty != ValueType::Bool)
+                    || (!target_ty.is_num() && *target_ty != ValueType::Bool)
+                {
+                    let ty = SemErrType::InvalidCast(target_ty.clone(), value_ty);
+                    return Err(SemErr::new(line, ty));
+                }
+
+                target_ty.clone()
+            }
+            ExprType::Colon { inst, property } => {
+                let (ty, index) = self.get_enum_variant_data(inst, property, line)?;
+                expr.expr = ExprType::Lit(Literal::U64(index));
+                ty
+            }
+            ExprType::This => unreachable!(),
+            ExprType::DotResolved { .. } => unreachable!(),
+            ExprType::MethodCallResolved { .. } => unreachable!(),
+            ExprType::DotAssignResolved { .. } => unreachable!(),
+        };
+
+        expr.end_ty = result.clone();
+        Ok(result)
+    }
+
+    fn get_enum_variant_data(
+        &self,
+        inst: &Expr,
+        property: &str,
+        line: u32,
+    ) -> Result<(ValueType, u64), SemErr> {
+        let ExprType::Identifier(ref name) = inst.expr else {
+            let ty = SemErrType::InvalidStaticAccess;
+            return Err(SemErr::new(line, ty));
+        };
+        let Some(variants) = self.user_types.enums.get(name) else {
+            let ty = SemErrType::InvalidStaticAccess;
+            return Err(SemErr::new(line, ty));
+        };
+        for (index, var) in variants.iter().enumerate() {
+            if *var == property {
+                return Ok((ValueType::Enum(name.to_string()), index as u64));
+            }
+        }
+
+        let ty = SemErrType::InvalidVariant(name.to_string(), property.to_string());
+        Err(SemErr::new(line, ty))
+    }
+
+    fn analyse_assign(
+        &mut self,
+        name: &str,
+        value: &mut Box<Expr>,
+        line: u32,
+    ) -> Result<ValueType, SemErr> {
+        match self.symbols.resolve(name) {
+            Some(symbol) => {
+                let value_ty = self.analyse_expr(value)?;
+                if symbol.ty != value_ty
+                    && symbol.ty != ValueType::Any
+                    && !try_coerce(&mut value.expr, &symbol.ty)
+                {
+                    let err_ty = SemErrType::VarDeclTypeMismatch(symbol.ty, value_ty);
+                    return Err(SemErr::new(line, err_ty));
+                }
+                Ok(symbol.ty)
+            }
+            None => {
+                let ty = SemErrType::UndefinedVar(name.to_string());
+                Err(SemErr::new(line, ty))
+            }
+        }
+    }
+
+    fn analyse_method_call(
+        &mut self,
+        inst: &mut Box<Expr>,
+        property: &str,
+        line: u32,
+        args: &mut [Expr],
+        is_static: bool,
+    ) -> Result<(u8, ValueType, bool), SemErr> {
+        let name = self.get_inst_or_struct_name(inst, is_static, line)?;
+
+        for arg in args.iter_mut() {
+            self.analyse_expr(arg)?;
+        }
+
+        let (index, return_ty, use_self, parameters) =
+            if let Some(data) = self.user_types.structs.get(&name as &str) {
+                data.get_method_data(&name, property, line)?
+            } else {
+                let ty = SemErrType::UndefinedType(name);
+                return Err(SemErr::new(line, ty));
+            };
+
+        self.check_if_params_and_args_correspond(args, parameters, name, line)?;
+
+        if is_static && use_self {
+            let ty = SemErrType::SelfOnStaticMethod;
+            return Err(SemErr::new(line, ty));
+        }
+        if !is_static && !use_self {
+            let ty = SemErrType::NoSelfOnMethod;
+            return Err(SemErr::new(line, ty));
+        }
+
+        Ok((index, return_ty, use_self))
+    }
+    fn get_inst_or_struct_name(
+        &mut self,
+        inst: &mut Box<Expr>,
+        is_static: bool,
+        line: u32,
+    ) -> Result<String, SemErr> {
+        if let ExprType::This = inst.expr {
+            let Some(ref name) = self.current_struct else {
+                let ty = SemErrType::SelfOutsideStruct;
+                return Err(SemErr::new(line, ty));
+            };
+
+            if is_static {
+                let ty = SemErrType::SelfAsStaticStruct;
+                return Err(SemErr::new(line, ty));
+            }
+
+            if !self.current_use_self {
+                let ty = SemErrType::SelfInMethodWithoutSelfParam;
+                return Err(SemErr::new(line, ty));
+            }
+            return Ok(name.to_string());
+        }
+        // dbg!(&inst);
+        if let ExprType::Identifier(ref name) = inst.expr {
+            if self.user_types.structs.contains_key(name) {
+                return Ok(name.to_string());
+            }
+        }
+        let mut inst_ty = self.analyse_expr(inst)?;
+        self.user_types.resolve_value_ty(&mut inst_ty);
+
+        let ValueType::Struct(name) = inst_ty.clone() else {
+            let ty = SemErrType::InvalidTypeMethodAccess(inst_ty);
+            return Err(SemErr::new(line, ty));
+        };
+
+        if is_static {
+            let ty = SemErrType::StaticMethodOnInstance(name);
+            return Err(SemErr::new(line, ty));
+        }
+
+        Ok(name)
+    }
+
+    fn analyse_assign_index(
+        &mut self,
+        arr: &mut Box<Expr>,
+        value: &mut Box<Expr>,
+        line: u32,
+    ) -> Result<ValueType, SemErr> {
+        let arr = self.analyse_expr(arr)?;
+        Ok(match arr {
+            ValueType::Arr(ty) => {
+                let value_ty = self.analyse_expr(value)?;
+                if value_ty != *ty {
+                    let ty = SemErrType::AssignArrTypeMismatch(*ty, value_ty);
+                    return Err(SemErr::new(line, ty));
+                }
+                *ty
+            }
+            _ => {
+                let ty = SemErrType::IndexNonArr(arr);
+                return Err(SemErr::new(line, ty));
+            }
+        })
+    }
+
+    fn analyse_array_expr(&mut self, values: &mut [Expr], line: u32) -> Result<ValueType, SemErr> {
+        if values.is_empty() {
+            return Ok(ValueType::Arr(Box::new(ValueType::Any)));
+        }
+        let el_ty = self.analyse_expr(&mut values[0])?;
+        for el in values.iter_mut().skip(1) {
+            let next_el_ty = self.analyse_expr(el)?;
+
+            if next_el_ty != el_ty && !try_coerce(&mut el.expr, &el_ty) {
+                let err_ty = SemErrType::ArrElTypeMismatch(el_ty, next_el_ty);
+                return Err(SemErr::new(line, err_ty));
+            }
+        }
+        Ok(ValueType::Arr(Box::new(el_ty)))
+    }
+
+    fn analyse_binary(
+        &mut self,
+        left: &mut Box<Expr>,
+        right: &mut Box<Expr>,
+        op: BinaryOp,
+        line: u32,
+    ) -> Result<ValueType, SemErr> {
+        let mut left_ty = self.analyse_expr(left)?;
+        let mut right_ty = self.analyse_expr(right)?;
+        self.user_types.resolve_value_ty(&mut left_ty);
+        self.user_types.resolve_value_ty(&mut right_ty);
+
+        if left_ty != right_ty
+            && !try_coerce(&mut right.expr, &left_ty)
+            && !try_coerce(&mut left.expr, &right_ty)
+        {
+            let op = op.to_operator();
+            let err_ty = SemErrType::OpTypeMismatch(left_ty, op, right_ty);
+            return Err(SemErr::new(line, err_ty));
+        }
+
+        use BinaryOp as BO;
+        let is_valid = match op {
+            // TODO: made adding strings illegal for now
+            BO::Add => left_ty.is_num(), /*|| left_ty == ValueType::Str, */
+            BO::Sub | BO::Mul | BO::Div => left_ty.is_num(),
+            BO::Equal | BO::NotEqual => return Ok(ValueType::Bool),
+            BO::Less | BO::LessEqual | BO::Greater | BO::GreaterEqual => {
+                if left_ty.is_num() {
+                    return Ok(ValueType::Bool);
+                }
+                false
+            }
+            BO::And | BO::Or => left_ty == ValueType::Bool,
+        };
+
+        if is_valid {
+            Ok(left_ty)
+        } else {
+            Err(SemErr::new(
+                line,
+                SemErrType::InvalidInfixOp(left_ty, op.to_operator()),
+            ))
+        }
+    }
+
+    fn analyse_unary(
+        &mut self,
+        value: &mut Box<Expr>,
+        prefix: TokenType,
+        line: u32,
+    ) -> Result<ValueType, SemErr> {
+        let value_ty = self.analyse_expr(value)?;
+
+        match prefix {
+            TokenType::Minus => {
+                if value_ty != ValueType::I64 && value_ty != ValueType::F64 {
+                    let err_ty =
+                        SemErrType::OpTypeMismatch(ValueType::I64, Operator::Minus, value_ty);
+                    return Err(SemErr::new(line, err_ty));
+                }
+                Ok(value_ty)
+            }
+            TokenType::Bang => {
+                if value_ty != ValueType::Bool {
+                    let err_ty =
+                        SemErrType::OpTypeMismatch(ValueType::Bool, Operator::Bang, value_ty);
+                    return Err(SemErr::new(line, err_ty));
+                }
+                Ok(value_ty)
+            }
+            _ => Err(SemErr::new(line, SemErrType::InvalidPrefixOp)),
+        }
+    }
+
+    fn check_if_params_and_args_correspond(
+        &mut self,
+        args: &mut [Expr],
+        parameters: Vec<ValueType>,
+        name: String,
+        line: u32,
+    ) -> Result<(), SemErr> {
+        if args.len() != parameters.len() {
+            let err_ty = SemErrType::IncorrectArity(
+                name.to_string(),
+                parameters.len() as u8,
+                args.len() as u8,
+            );
+            return Err(SemErr::new(line, err_ty));
+        }
+
+        for (i, arg) in args.iter_mut().enumerate() {
+            let arg_ty = self.analyse_expr(arg)?;
+            // self.entities.resolve_value_ty(&mut arg_ty);
+
+            let param_ty = &parameters[i];
+
+            let is_exact_match = arg_ty == *param_ty;
+            let is_any = *param_ty == ValueType::Any;
+            let is_array_match = matches!(param_ty, ValueType::Arr(inner) if **inner == ValueType::Any)
+                && matches!(arg_ty, ValueType::Arr(_));
+
+            let is_type_match = match (param_ty, &arg_ty) {
+                (ValueType::UnknownType(name_1), ValueType::Struct(name_2)) => name_1 == name_2,
+                (ValueType::UnknownType(name_1), ValueType::Enum(name_2)) => name_1 == name_2,
+                _ => false,
+            };
+            let can_coerce = !try_coerce(&mut arg.expr, param_ty);
+
+            if !is_exact_match && !is_any && !is_array_match && can_coerce && !is_type_match {
+                let err_ty =
+                    SemErrType::ParamTypeMismatch(name.to_string(), param_ty.clone(), arg_ty);
+                return Err(SemErr::new(line, err_ty));
+            }
+        }
+        Ok(())
+    }
+
+    fn analyse_dot(
+        &mut self,
+        new_value: Option<&mut Box<Expr>>,
+        inst: &mut Box<Expr>,
+        line: u32,
+        property: &str,
+    ) -> Result<(ValueType, ExprType), SemErr> {
+        let name = if let ExprType::This = inst.expr {
+            let Some(ref name) = self.current_struct else {
+                let ty = SemErrType::SelfOutsideStruct;
+                return Err(SemErr::new(line, ty));
+            };
+
+            if !self.current_use_self {
+                let ty = SemErrType::SelfInMethodWithoutSelfParam;
+                return Err(SemErr::new(line, ty));
+            }
+            name.to_string()
+        } else {
+            let mut inst_ty = self.analyse_expr(inst)?;
+            self.user_types.resolve_value_ty(&mut inst_ty);
+
+            let ValueType::Struct(name) = inst_ty else {
+                let ty = SemErrType::InvalidTypeFieldAccess(inst_ty);
+                return Err(SemErr::new(line, ty));
+            };
+            name
+        };
+        let Some(data) = self.user_types.structs.get(&name as &str) else {
+            let ty = SemErrType::UndefinedType(name);
+            return Err(SemErr::new(line, ty));
+        };
+
+        let index = data.get_field_index(name, property, line)?;
+        let field_ty = data.fields[index as usize].clone().0;
+
+        let expr = if let Some(new_value) = new_value {
+            let new_value_ty = self.analyse_expr(new_value)?;
+            if new_value_ty != field_ty && !try_coerce(&mut new_value.expr, &field_ty) {
+                let err_ty = SemErrType::FieldTypeMismatch(field_ty, new_value_ty);
+                return Err(SemErr::new(line, err_ty));
+            }
+            ExprType::DotAssignResolved {
+                inst: inst.clone(),
+                new_value: new_value.clone(),
+                index,
+            }
+        } else {
+            ExprType::DotResolved {
+                inst: inst.clone(),
+                index,
+            }
+        };
+
+        Ok((field_ty, expr))
+    }
+
+    fn get_called_func_data(
+        &mut self,
+        name: &String,
+        line: u32,
+    ) -> Result<(ValueType, Vec<ValueType>), SemErr> {
+        if let Some(data) = self.user_types.structs.get(name) {
+            let params = data.fields.iter().map(|(ty, _)| ty.clone()).collect();
+            let return_ty = ValueType::Struct(name.to_string());
+            return Ok((return_ty, params));
+        }
+
+        if let Some(data) = self.user_types.funcs.get(name) {
+            let parameters = data.parameters.iter().map(|p| p.0.clone()).collect();
+            let return_ty = data.return_ty.clone();
+
+            return Ok((return_ty, parameters));
+        };
+
+        let ty = SemErrType::UndefinedFunc(name.to_string());
+        Err(SemErr::new(line, ty))
+    }
+}
+
+// TODO: remove coercing
+fn try_coerce(expr: &mut ExprType, target: &ValueType) -> bool {
+    match expr {
+        ExprType::Lit(lit) => match (&lit, target) {
+            (Literal::I64(n), ValueType::U64) => {
+                *lit = Literal::U64(*n as u64);
+                true
+            }
+            _ => false,
+        },
+        ExprType::Binary { left, right, .. } => {
+            try_coerce(&mut left.expr, target) && try_coerce(&mut right.expr, target)
+        }
+        _ => false,
+    }
+}

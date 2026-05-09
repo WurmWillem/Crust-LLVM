@@ -1,6 +1,5 @@
 use colored::Colorize;
 
-use crate::value::ValueType;
 
 pub const PRINT_TOKENS: bool = false;
 pub const PRINT_PARSE_TREE: bool = false;
