@@ -105,10 +105,10 @@ impl<'ctx> CodeGen<'ctx> {
     fn emit_binary_expr(
         &self,
         left: &Box<Expr>,
-        op: &crate::parse_types::BinaryOp,
+        op: &crate::binary_op::BinaryOp,
         right: &Box<Expr>,
     ) -> Result<BasicValueEnum<'_>, BuilderError> {
-        use crate::parse_types::BinaryOp;
+        use crate::binary_op::BinaryOp;
 
         let result = match left.end_ty {
             ValueType::Bool => {

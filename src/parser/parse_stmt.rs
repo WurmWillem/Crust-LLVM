@@ -1,7 +1,7 @@
 use crate::{
     error::ParseErr,
     expression::{Expr, ExprType},
-    parse_types::BinaryOp,
+    binary_op::BinaryOp,
     statement::{Stmt, StmtType},
     token::{Literal, TokenType},
     value::ValueType,
@@ -155,29 +155,6 @@ impl Parser {
         Ok(Stmt::new(ty, line))
     }
 
-    fn parse_parameter(&mut self) -> Result<(ValueType, String), ParseErr> {
-        let var_ty = match self.advance().as_value_type() {
-            Some(mut var_type) => {
-                while self.matches(TokenType::LeftBracket) {
-                    self.consume(TokenType::RightBracket, "Expected ']' after left bracket.")?;
-                    var_type = ValueType::Arr(Box::new(var_type));
-                }
-                var_type
-            }
-            _ => {
-                return Err(ParseErr::new(
-                    self.previous().line,
-                    "Expected type for parameter.",
-                ));
-            }
-        };
-
-        self.consume(TokenType::Identifier, "Expected parameter name.")?;
-        let name = self.previous().lexeme;
-
-        Ok((var_ty, name))
-    }
-
     fn func_decl(&mut self) -> Result<Stmt, ParseErr> {
         self.consume(
             TokenType::Identifier,
@@ -188,21 +165,7 @@ impl Parser {
 
         self.consume(TokenType::LeftParen, "Expected '(' after function name.")?;
 
-        let mut parameters = Vec::new();
-        let mut use_self = false;
-        if !self.check(TokenType::RightParen) {
-            if self.matches(TokenType::This) {
-                use_self = true;
-                self.matches(TokenType::Comma);
-            }
-
-            if !self.check(TokenType::RightParen) {
-                parameters.push(self.parse_parameter()?);
-                while self.matches(TokenType::Comma) {
-                    parameters.push(self.parse_parameter()?);
-                }
-            }
-        }
+        let (parameters, use_self) = self.parse_parameters()?;
 
         self.consume(TokenType::RightParen, "Expected ')' after function name.")?;
 
@@ -245,6 +208,46 @@ impl Parser {
         };
         let func = Stmt::new(fn_ty, line);
         Ok(func)
+    }
+    fn parse_parameters(&mut self) -> Result<(Vec<(ValueType, String)>, bool), ParseErr> {
+        let mut parameters = Vec::new();
+        let mut use_self = false;
+        if !self.check(TokenType::RightParen) {
+            if self.matches(TokenType::This) {
+                use_self = true;
+                self.matches(TokenType::Comma);
+            }
+
+            if !self.check(TokenType::RightParen) {
+                parameters.push(self.parse_parameter()?);
+                while self.matches(TokenType::Comma) {
+                    parameters.push(self.parse_parameter()?);
+                }
+            }
+        }
+        Ok((parameters, use_self))
+    }
+    fn parse_parameter(&mut self) -> Result<(ValueType, String), ParseErr> {
+        let var_ty = match self.advance().as_value_type() {
+            Some(mut var_type) => {
+                while self.matches(TokenType::LeftBracket) {
+                    self.consume(TokenType::RightBracket, "Expected ']' after left bracket.")?;
+                    var_type = ValueType::Arr(Box::new(var_type));
+                }
+                var_type
+            }
+            _ => {
+                return Err(ParseErr::new(
+                    self.previous().line,
+                    "Expected type for parameter.",
+                ));
+            }
+        };
+
+        self.consume(TokenType::Identifier, "Expected parameter name.")?;
+        let name = self.previous().lexeme;
+
+        Ok((var_ty, name))
     }
 
     fn block(&mut self) -> Result<Stmt, ParseErr> {

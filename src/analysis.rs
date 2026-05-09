@@ -1,11 +1,5 @@
 use crate::{
-    analysis_types::{FuncData, Operator, SemanticScope, StructData, Symbol, UserTypes},
-    error::{SemErr, SemErrType},
-    expression::{Expr, ExprType},
-    parse_types::BinaryOp,
-    statement::{Stmt, StmtType},
-    token::{Literal, TokenType},
-    value::ValueType,
+    analysis_types::{FuncData, Operator, SemanticScope, StructData, Symbol, UserTypes}, binary_op::BinaryOp, error::{SemErr, SemErrType}, expression::{Expr, ExprType}, statement::{Stmt, StmtType}, token::{Literal, TokenType}, value::ValueType
 };
 
 pub struct Analyser {

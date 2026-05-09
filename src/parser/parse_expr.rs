@@ -1,10 +1,7 @@
-use super::Parser;
+use super::{types::{FnType, Precedence}, Parser};
 
 use crate::{
-    error::ParseErr,
-    expression::{Expr, ExprType},
-    parse_types::{BinaryOp, FnType, Precedence},
-    token::{Literal, TokenType},
+    binary_op::BinaryOp, error::ParseErr, expression::{Expr, ExprType}, token::{Literal, TokenType}
 };
 
 impl Parser {

@@ -6,6 +6,7 @@ use crate::{
 
 mod parse_expr;
 mod parse_stmt;
+mod types;
 
 use colored::Colorize;
 

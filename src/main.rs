@@ -11,12 +11,12 @@ mod c_funcs;
 mod codegen;
 mod error;
 mod expression;
-mod parse_types;
 mod parser;
 mod scanner;
 mod statement;
 mod token;
 mod value;
+mod binary_op;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

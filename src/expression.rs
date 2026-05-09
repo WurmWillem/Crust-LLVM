@@ -1,5 +1,5 @@
+use crate::binary_op::BinaryOp;
 use crate::{
-    parse_types::BinaryOp,
     token::{Literal, TokenType},
     value::ValueType,
 };

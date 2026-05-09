@@ -1,4 +1,4 @@
-use crate::{analysis_types::Operator, token::TokenType};
+use crate::{binary_op::BinaryOp, token::TokenType};
 
 #[derive(Debug, Clone, Copy, PartialEq, PartialOrd)]
 #[repr(u8)]
@@ -87,23 +87,6 @@ impl ParseRule {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum BinaryOp {
-    Add,
-    Sub,
-    Mul,
-    Div,
-
-    Equal,
-    NotEqual,
-    Less,
-    LessEqual,
-    Greater,
-    GreaterEqual,
-
-    And,
-    Or,
-}
 impl BinaryOp {
     pub fn get_precedency(self) -> Precedence {
         match self {
@@ -117,39 +100,38 @@ impl BinaryOp {
             BinaryOp::Or => Precedence::Or,
         }
     }
+}
 
-    pub fn from_token_type(ty: TokenType) -> Self {
-        match ty {
-            TokenType::Plus => BinaryOp::Add,
-            TokenType::Minus => BinaryOp::Sub,
-            TokenType::Star => BinaryOp::Mul,
-            TokenType::Slash => BinaryOp::Div,
-            TokenType::EqualEqual => BinaryOp::Equal,
-            TokenType::BangEqual => BinaryOp::NotEqual,
-            TokenType::Less => BinaryOp::Less,
-            TokenType::LessEqual => BinaryOp::LessEqual,
-            TokenType::Greater => BinaryOp::Greater,
-            TokenType::GreaterEqual => BinaryOp::GreaterEqual,
-            TokenType::And => BinaryOp::And,
-            TokenType::Or => BinaryOp::Or,
-            _ => unreachable!(),
-        }
-    }
+impl TokenType {
+    pub fn to_parse_rule(self) -> ParseRule {
+        use FnType as F;
+        use Precedence as P;
+        use TokenType as TT;
 
-    pub fn to_operator(self) -> Operator {
         match self {
-            BinaryOp::Add => Operator::Add,
-            BinaryOp::Sub => Operator::Sub,
-            BinaryOp::Mul => Operator::Mul,
-            BinaryOp::Div => Operator::Div,
-            BinaryOp::Equal => Operator::Equal,
-            BinaryOp::NotEqual => Operator::NotEqual,
-            BinaryOp::Less => Operator::Less,
-            BinaryOp::LessEqual => Operator::LessEqual,
-            BinaryOp::Greater => Operator::Greater,
-            BinaryOp::GreaterEqual => Operator::GreaterEqual,
-            BinaryOp::And => Operator::And,
-            BinaryOp::Or => Operator::Or,
+            TT::LeftParen => ParseRule::new(F::Grouping, F::Call, P::Call),
+            TT::LeftBracket => ParseRule::new(F::Array, F::Index, P::Call),
+            TT::Dot => ParseRule::new(F::Empty, F::Dot, P::Call),
+            TT::DoubleColon => ParseRule::new(F::Empty, F::DoubleColon, P::Call),
+            TT::Minus => ParseRule::new(F::Unary, F::Binary, P::Term),
+            TT::Plus => ParseRule::new(F::Empty, F::Binary, P::Term),
+            TT::Slash | TT::Star => ParseRule::new(F::Empty, F::Binary, P::Factor),
+            TT::Bang => ParseRule::new(F::Unary, F::Empty, P::Factor),
+            TT::EqualEqual
+            | TT::BangEqual
+            | TT::Greater
+            | TT::GreaterEqual
+            | TT::Less
+            | TT::LessEqual => ParseRule::new(F::Empty, F::Binary, P::Comparison),
+            TT::Identifier => ParseRule::new(F::Var, F::Empty, P::Primary),
+            TT::StringLit => ParseRule::new(F::String, F::Empty, P::Primary),
+            TT::Num => ParseRule::new(F::Number, F::Empty, P::Primary),
+            TT::As => ParseRule::new(F::Number, F::Cast, P::Cast),
+            TT::And => ParseRule::new(F::Empty, F::Binary, P::And),
+            TT::Or => ParseRule::new(F::Empty, F::Binary, P::Or),
+            TT::False | TT::True | TT::Null => ParseRule::new(F::Literal, F::Empty, P::Primary),
+            TT::This => ParseRule::new(F::This, F::Empty, P::Primary),
+            _ => ParseRule::new(F::Empty, F::Empty, P::Primary),
         }
     }
 }
