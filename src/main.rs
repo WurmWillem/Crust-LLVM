@@ -7,7 +7,6 @@ use colored::Colorize;
 
 mod analysis;
 mod analysis_types;
-mod c_funcs;
 mod codegen;
 mod error;
 mod expression;

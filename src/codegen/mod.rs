@@ -1,7 +1,9 @@
+mod c_funcs;
 mod emit_expr;
 mod emit_stmt;
 mod types;
 
+use crate::codegen::c_funcs::*;
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
@@ -14,7 +16,6 @@ use std::collections::HashMap;
 use std::error::Error;
 
 use crate::analysis_types::UserTypes;
-use crate::c_funcs::*;
 use crate::value::ValueType;
 
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
