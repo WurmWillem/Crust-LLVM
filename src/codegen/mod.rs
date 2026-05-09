@@ -1,7 +1,6 @@
 mod c_funcs;
 mod emit_expr;
 mod emit_stmt;
-mod types;
 
 use crate::analysis::UserTypes;
 use crate::codegen::c_funcs::*;
