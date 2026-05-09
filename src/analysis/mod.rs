@@ -1,6 +1,16 @@
+mod types;
+
 use crate::{
-    analysis_types::{FuncData, Operator, SemanticScope, StructData, Symbol, UserTypes}, binary_op::BinaryOp, error::{SemErr, SemErrType}, expression::{Expr, ExprType}, statement::{Stmt, StmtType}, token::{Literal, TokenType}, value::ValueType
+    analysis::types::{SemErr, SemErrType},
+    binary_op::BinaryOp,
+    expression::{Expr, ExprType},
+    statement::{Stmt, StmtType},
+    token::{Literal, TokenType},
+    value::ValueType,
 };
+use types::{FuncData, Operator, SemanticScope, StructData, Symbol};
+
+pub use types::UserTypes;
 
 pub struct Analyser {
     user_types: UserTypes,

@@ -1,4 +1,4 @@
-use analysis::Analyser;
+use crate::analysis::Analyser;
 use codegen::CodeGen;
 use error::{PRINT_PARSE_TREE, PRINT_TOKENS};
 use scanner::Scanner;
@@ -6,7 +6,7 @@ use scanner::Scanner;
 use colored::Colorize;
 
 mod analysis;
-mod analysis_types;
+mod binary_op;
 mod codegen;
 mod error;
 mod expression;
@@ -15,7 +15,6 @@ mod scanner;
 mod statement;
 mod token;
 mod value;
-mod binary_op;
 
 fn main() {
     let args: Vec<String> = std::env::args().collect();

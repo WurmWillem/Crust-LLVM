@@ -3,7 +3,10 @@ mod emit_expr;
 mod emit_stmt;
 mod types;
 
+use crate::analysis::UserTypes;
 use crate::codegen::c_funcs::*;
+use crate::value::ValueType;
+
 use inkwell::builder::{Builder, BuilderError};
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
@@ -15,12 +18,8 @@ use inkwell::{AddressSpace, OptimizationLevel};
 use std::collections::HashMap;
 use std::error::Error;
 
-use crate::analysis_types::UserTypes;
-use crate::value::ValueType;
-
 /// Calling this is innately `unsafe` because there's no guarantee it doesn't
 /// do `unsafe` operations internally.
-
 pub type MainFunc = unsafe extern "C" fn();
 
 pub struct CodeGen<'ctx> {

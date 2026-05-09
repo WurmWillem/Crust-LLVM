@@ -1,4 +1,3 @@
-use crate::analysis_types::Operator;
 use crate::token::TokenType;
 
 #[derive(Debug, Clone, Copy)]
@@ -37,20 +36,4 @@ impl BinaryOp {
         }
     }
 
-    pub fn to_operator(self) -> Operator {
-        match self {
-            BinaryOp::Add => Operator::Add,
-            BinaryOp::Sub => Operator::Sub,
-            BinaryOp::Mul => Operator::Mul,
-            BinaryOp::Div => Operator::Div,
-            BinaryOp::Equal => Operator::Equal,
-            BinaryOp::NotEqual => Operator::NotEqual,
-            BinaryOp::Less => Operator::Less,
-            BinaryOp::LessEqual => Operator::LessEqual,
-            BinaryOp::Greater => Operator::Greater,
-            BinaryOp::GreaterEqual => Operator::GreaterEqual,
-            BinaryOp::And => Operator::And,
-            BinaryOp::Or => Operator::Or,
-        }
-    }
 }
