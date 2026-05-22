@@ -29,8 +29,7 @@ pub struct CodeGen<'ctx> {
 
     alloc_builder: Builder<'ctx>,
     declared_vars: Vec<HashMap<String, (PointerValue<'ctx>, ValueType)>>,
-
-    struct_data: Vec<HashMap<String, BasicTypeEnum<'ctx>>>,
+    // struct_data: Vec<HashMap<String, BasicTypeEnum<'ctx>>>,
 }
 impl<'ctx> CodeGen<'ctx> {
     pub fn compile(user_types: UserTypes) -> Result<(), Box<dyn Error>> {
@@ -45,7 +44,7 @@ impl<'ctx> CodeGen<'ctx> {
             alloc_builder: context.create_builder(),
             execution_engine,
             declared_vars: vec![],
-            struct_data: vec![],
+            // struct_data: vec![],
         };
 
         codegen.declare_structs(&user_types);
@@ -227,6 +226,7 @@ impl<'ctx> CodeGen<'ctx> {
             ValueType::F64 => self.context.f64_type().into(),
             ValueType::Str => self.string_type().into(),
             ValueType::Struct(name) => self.context.get_struct_type(name).unwrap().into(),
+            ValueType::UnknownType(name) => self.context.get_struct_type(name).unwrap().into(),
             _ => todo!(),
         }
     }

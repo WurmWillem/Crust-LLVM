@@ -1,5 +1,6 @@
 use inkwell::builder::BuilderError;
 use inkwell::values::BasicValueEnum;
+use inkwell::AddressSpace;
 
 use crate::expression::{Expr, ExprType};
 use crate::value::ValueType;
@@ -8,7 +9,7 @@ use super::CodeGen;
 
 impl<'ctx> CodeGen<'ctx> {
     pub(super) fn emit_expr(&self, expr: &Expr) -> Result<BasicValueEnum, BuilderError> {
-        // dbg!(&expr.expr);
+        dbg!(&expr.expr);
         use crate::token::Literal;
         match &expr.expr {
             ExprType::Cast { value, target_ty } => self.emit_cast(value, target_ty),
@@ -33,6 +34,7 @@ impl<'ctx> CodeGen<'ctx> {
                     Literal::True => self.context.bool_type().const_int(1, false).into(),
                     Literal::False => self.context.bool_type().const_int(0, false).into(),
                     Literal::Str(string) => self.emit_str_expr(string)?,
+                    Literal::Null => self.context.ptr_type(AddressSpace::default()).const_null().into(),
                     _ => todo!(),
                 };
                 Ok(result)

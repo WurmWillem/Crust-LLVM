@@ -1,7 +1,7 @@
 struct Vec2 {
+    int x;
 }
 
 fn main() {
-    str x = "sfds";
-    str y = "sfds";
+    Vec2 vec;
 }
