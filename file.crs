@@ -1,3 +1,7 @@
+struct Vec2 {
+}
+
 fn main() {
-    pr 23;
+    str x = "sfds";
+    str y = "sfds";
 }

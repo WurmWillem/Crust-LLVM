@@ -30,13 +30,13 @@ pub struct CodeGen<'ctx> {
     alloc_builder: Builder<'ctx>,
     declared_vars: Vec<HashMap<String, (PointerValue<'ctx>, ValueType)>>,
 
-    user_types: UserTypes,
+    struct_data: Vec<HashMap<String, BasicTypeEnum<'ctx>>>,
 }
 impl<'ctx> CodeGen<'ctx> {
     pub fn compile(user_types: UserTypes) -> Result<(), Box<dyn Error>> {
         let context = Context::create();
         let module = context.create_module("program");
-        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::Aggressive)?;
+        let execution_engine = module.create_jit_execution_engine(OptimizationLevel::None)?;
 
         let mut codegen = CodeGen {
             context: &context,
@@ -45,11 +45,14 @@ impl<'ctx> CodeGen<'ctx> {
             alloc_builder: context.create_builder(),
             execution_engine,
             declared_vars: vec![],
-            user_types,
+            struct_data: vec![],
         };
 
-        codegen.declare_funcs();
-        codegen.build_func_bodies()?;
+        codegen.declare_structs(&user_types);
+        codegen.define_structs(&user_types);
+
+        codegen.declare_funcs(&user_types);
+        codegen.define_funcs(user_types)?;
 
         let print_i64_fn = codegen.module.get_function("print_i64").unwrap();
         codegen
@@ -75,7 +78,11 @@ impl<'ctx> CodeGen<'ctx> {
             unsafe { codegen.execution_engine.get_function("main").ok() }
                 .ok_or("Unable to get JIT function")?;
 
-        // codegen.module.print_to_stderr();
+        if let Err(err) = codegen.module.verify() {
+            codegen.module.print_to_stderr();
+            panic!("LLVM verification failed: {err}");
+        }
+        codegen.module.print_to_stderr();
 
         // let start = std::time::Instant::now();
         unsafe {
@@ -111,7 +118,25 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn declare_funcs(&mut self) {
+    fn declare_structs(&mut self, user_types: &UserTypes) {
+        for (name, _) in user_types.structs.iter() {
+            self.context.opaque_struct_type(name);
+        }
+    }
+
+    fn define_structs(&mut self, user_types: &UserTypes) {
+        for (name, data) in user_types.structs.iter() {
+            let struct_ty = self.module.get_struct_type(name).unwrap();
+            let fields: Vec<BasicTypeEnum> = data
+                .fields
+                .iter()
+                .map(|(ty, _)| self.to_llvm_type(ty))
+                .collect();
+            struct_ty.set_body(&fields, false);
+        }
+    }
+
+    fn declare_funcs(&mut self, user_types: &UserTypes) {
         let i64_type = self.context.i64_type();
         let void_type = self.context.void_type();
         let ptr_ty = self.context.ptr_type(AddressSpace::default());
@@ -126,7 +151,7 @@ impl<'ctx> CodeGen<'ctx> {
         let print_str_type = void_type.fn_type(&[ptr_ty.into(), i64_type.into()], false);
         self.module.add_function("print_str", print_str_type, None);
 
-        for (name, data) in &self.user_types.funcs {
+        for (name, data) in &user_types.funcs {
             // dbg!(&data.return_ty);
             let fn_type = self.make_fn_type(&data.return_ty, &data.parameters);
             if self.module.get_function(name).is_none() {
@@ -135,10 +160,8 @@ impl<'ctx> CodeGen<'ctx> {
         }
     }
 
-    fn build_func_bodies(&mut self) -> Result<(), BuilderError> {
-        let mut funcs = std::mem::take(&mut self.user_types.funcs);
-
-        for (name, data) in funcs.iter_mut() {
+    fn define_funcs(&mut self, mut user_types: UserTypes) -> Result<(), BuilderError> {
+        for (name, data) in user_types.funcs.iter_mut() {
             // dbg!(&data.return_ty);
             let func = self.module.get_function(name).unwrap();
             let block = self.context.append_basic_block(func, "entry");
@@ -180,7 +203,6 @@ impl<'ctx> CodeGen<'ctx> {
             }
         }
 
-        self.user_types.funcs = funcs;
         Ok(())
     }
 
@@ -204,6 +226,7 @@ impl<'ctx> CodeGen<'ctx> {
             ValueType::Bool => self.context.bool_type().into(),
             ValueType::F64 => self.context.f64_type().into(),
             ValueType::Str => self.string_type().into(),
+            ValueType::Struct(name) => self.context.get_struct_type(name).unwrap().into(),
             _ => todo!(),
         }
     }

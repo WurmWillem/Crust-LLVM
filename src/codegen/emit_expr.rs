@@ -53,7 +53,8 @@ impl<'ctx> CodeGen<'ctx> {
 
                 let call_site = self.builder.build_call(func, &llvm_args, "calltmp")?;
 
-                // If function returns void
+                // if function returns void
+                // TODO: void functions crash i think
                 if func.get_type().get_return_type().is_none() {
                     unreachable!()
                 } else {
