@@ -9,7 +9,7 @@ use crate::value::ValueType;
 
 impl<'ctx> CodeGen<'ctx> {
     pub(super) fn emit_stmt(&mut self, stmt: &Stmt) -> Result<(), BuilderError> {
-        dbg!(&stmt.stmt);
+        // dbg!(&stmt.stmt);
         match &stmt.stmt {
             StmtType::While { condition, body } => {
                 self.emit_while_stmt(condition, body)?;

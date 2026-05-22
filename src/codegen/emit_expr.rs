@@ -1,6 +1,6 @@
+use inkwell::AddressSpace;
 use inkwell::builder::BuilderError;
 use inkwell::values::BasicValueEnum;
-use inkwell::AddressSpace;
 
 use crate::expression::{Expr, ExprType};
 use crate::value::ValueType;
@@ -9,9 +9,43 @@ use super::CodeGen;
 
 impl<'ctx> CodeGen<'ctx> {
     pub(super) fn emit_expr(&self, expr: &Expr) -> Result<BasicValueEnum, BuilderError> {
-        dbg!(&expr.expr);
+        // dbg!(&expr);
         use crate::token::Literal;
         match &expr.expr {
+            ExprType::DotResolved { inst, index } => {
+                // let value = self.emit_expr(&inst)?;
+                // let inst = value.into_struct_value();
+                // let field = inst.get_field_at_index(*index as u32).unwrap();
+
+                todo!()
+                // let (ptr, ty) = self.find_var(inst).unwrap();
+                // let struct_ty = self.to_llvm_type(ty).into_struct_type();
+                // let field_ptr =
+                //     self.builder
+                //         .build_struct_gep(struct_ty, *ptr, *index as u32, "field_ptr")?;
+                // let field_ty = struct_ty.get_field_type_at_index(*index as u32).unwrap();
+                // Ok(self.builder.build_load(field_ty, field_ptr, "field")?)
+
+                // Ok(field)
+            }
+            ExprType::DotAssignResolved {
+                inst,
+                new_value,
+                index,
+            } => {
+                let value = self.emit_expr(&inst)?;
+                let inst = value.into_struct_value();
+
+                let new_value = self.emit_expr(&new_value)?;
+                inst.set_field_at_index(*index as u32, new_value);
+
+                let null = self
+                    .context
+                    .ptr_type(AddressSpace::default())
+                    .const_null()
+                    .into();
+                Ok(null)
+            }
             ExprType::Cast { value, target_ty } => self.emit_cast(value, target_ty),
             ExprType::Identifier(name) => {
                 let (ptr, ty) = self.find_var(name).unwrap();
@@ -34,7 +68,11 @@ impl<'ctx> CodeGen<'ctx> {
                     Literal::True => self.context.bool_type().const_int(1, false).into(),
                     Literal::False => self.context.bool_type().const_int(0, false).into(),
                     Literal::Str(string) => self.emit_str_expr(string)?,
-                    Literal::Null => self.context.ptr_type(AddressSpace::default()).const_null().into(),
+                    Literal::Null => self
+                        .context
+                        .ptr_type(AddressSpace::default())
+                        .const_null()
+                        .into(),
                     _ => todo!(),
                 };
                 Ok(result)
