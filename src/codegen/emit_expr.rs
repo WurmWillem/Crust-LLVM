@@ -12,32 +12,30 @@ impl<'ctx> CodeGen<'ctx> {
         // dbg!(&expr);
         use crate::token::Literal;
         match &expr.expr {
-            ExprType::DotResolved { inst, index } => {
-                // let value = self.emit_expr(&inst)?;
-                // let inst = value.into_struct_value();
-                // let field = inst.get_field_at_index(*index as u32).unwrap();
-
-                todo!()
-                // let (ptr, ty) = self.find_var(inst).unwrap();
-                // let struct_ty = self.to_llvm_type(ty).into_struct_type();
-                // let field_ptr =
-                //     self.builder
-                //         .build_struct_gep(struct_ty, *ptr, *index as u32, "field_ptr")?;
-                // let field_ty = struct_ty.get_field_type_at_index(*index as u32).unwrap();
-                // Ok(self.builder.build_load(field_ty, field_ptr, "field")?)
-
-                // Ok(field)
+            ExprType::DotResolved { inst_name: name, index } => {
+                let (ptr, ty) = self.find_var(name).unwrap();
+                let struct_ty = self.to_llvm_type(ty).into_struct_type();
+                let field_ptr =
+                    self.builder
+                        .build_struct_gep(struct_ty, *ptr, *index as u32, "field_ptr")?;
+                let field_ty = struct_ty.get_field_type_at_index(*index as u32).unwrap();
+                Ok(self.builder.build_load(field_ty, field_ptr, "field")?)
             }
             ExprType::DotAssignResolved {
-                inst,
+                inst_name: name,
                 new_value,
                 index,
             } => {
-                let value = self.emit_expr(&inst)?;
-                let inst = value.into_struct_value();
+                dbg!(name);
+                let (ptr, ty) = self.find_var(name).unwrap();
+                let struct_ty = self.to_llvm_type(ty).into_struct_type();
+                let field_ptr =
+                    self.builder
+                        .build_struct_gep(struct_ty, *ptr, *index as u32, "field_ptr")?;
 
                 let new_value = self.emit_expr(&new_value)?;
-                inst.set_field_at_index(*index as u32, new_value);
+                self.builder.build_store(field_ptr, new_value)?;
+                // Ok(self.builder.build_load(field_ty, field_ptr, "field")?)
 
                 let null = self
                     .context

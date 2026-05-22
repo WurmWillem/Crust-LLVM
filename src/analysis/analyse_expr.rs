@@ -402,7 +402,16 @@ impl Analyser {
         line: u32,
         property: &str,
     ) -> Result<(ValueType, ExprType), SemErr> {
-        let name = if let ExprType::This = inst.expr {
+
+        let mut inst_ty = self.analyse_expr(inst)?;
+
+        let ExprType::Identifier(ref inst_name) = inst.expr else {
+            unreachable!()
+        };
+
+        self.user_types.resolve_value_ty(&mut inst_ty);
+
+        let struct_name = if let ExprType::This = inst.expr {
             let Some(ref name) = self.current_struct else {
                 let ty = SemErrType::SelfOutsideStruct;
                 return Err(SemErr::new(line, ty));
@@ -414,21 +423,18 @@ impl Analyser {
             }
             name.to_string()
         } else {
-            let mut inst_ty = self.analyse_expr(inst)?;
-            self.user_types.resolve_value_ty(&mut inst_ty);
-
             let ValueType::Struct(name) = inst_ty else {
                 let ty = SemErrType::InvalidTypeFieldAccess(inst_ty);
                 return Err(SemErr::new(line, ty));
             };
             name
         };
-        let Some(data) = self.user_types.structs.get(&name as &str) else {
-            let ty = SemErrType::UndefinedType(name);
+        let Some(data) = self.user_types.structs.get(&struct_name as &str) else {
+            let ty = SemErrType::UndefinedType(struct_name);
             return Err(SemErr::new(line, ty));
         };
 
-        let index = data.get_field_index(name, property, line)?;
+        let index = data.get_field_index(struct_name.clone(), property, line)?;
         let field_ty = data.fields[index as usize].clone().0;
 
         let expr = if let Some(new_value) = new_value {
@@ -438,15 +444,12 @@ impl Analyser {
                 return Err(SemErr::new(line, err_ty));
             }
             ExprType::DotAssignResolved {
-                inst: inst.clone(),
+                inst_name: inst_name.clone(),
                 new_value: new_value.clone(),
                 index,
             }
         } else {
-            ExprType::DotResolved {
-                inst: inst.clone(),
-                index,
-            }
+            ExprType::DotResolved { inst_name: inst_name.clone(), index }
         };
 
         Ok((field_ty, expr))

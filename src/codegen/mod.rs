@@ -226,6 +226,7 @@ impl<'ctx> CodeGen<'ctx> {
             ValueType::F64 => self.context.f64_type().into(),
             ValueType::Str => self.string_type().into(),
             ValueType::Struct(name) => self.context.get_struct_type(name).unwrap().into(),
+            // TODO: remove
             ValueType::UnknownType(name) => self.context.get_struct_type(name).unwrap().into(),
             _ => todo!(),
         }

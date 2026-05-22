@@ -58,7 +58,7 @@ pub enum ExprType {
         property: String,
     },
     DotResolved {
-        inst: Box<Expr>,
+        inst_name: String,
         index: u8,
     },
     DotAssign {
@@ -66,8 +66,9 @@ pub enum ExprType {
         property: String,
         new_value: Box<Expr>,
     },
+    // TODO: this should not be an expression
     DotAssignResolved {
-        inst: Box<Expr>,
+        inst_name: String,
         index: u8,
         new_value: Box<Expr>,
     },

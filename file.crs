@@ -1,8 +1,13 @@
 struct Vec2 {
     int x;
+    int y;
 }
 
 fn main() {
     Vec2 vec;
     vec.x = 3;
+    vec.y = 2;
+
+    pr vec.x;
+    pr vec.y;
 }
